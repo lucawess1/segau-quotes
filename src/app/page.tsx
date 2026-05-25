@@ -7,7 +7,7 @@ import { Zap, User, Plus, X, FileText, ArrowLeftRight, Save, Info } from 'lucide
 type QuoteExtra = Extra & { instanceId: string }
 
 // Product sets that include each component
-const HAS_BATTERY = ['Solar & Battery', 'Battery Only', 'HWHP & Battery', 'HWHP, Solar & Battery']
+const HAS_BATTERY = ['Solar & Battery', 'Battery Only', 'Battery Only - Additional', 'HWHP & Battery', 'HWHP, Solar & Battery']
 const HAS_SOLAR = ['Solar Only', 'Solar & Battery', 'HWHP, Solar & Battery']
 const HAS_HWHP = ['HWHP Only', 'HWHP & Battery', 'HWHP, Solar & Battery']
 const HAS_HVAC = ['HVAC']
@@ -17,6 +17,7 @@ const VISIBLE_PRODUCT_SETS = [
   'Solar Only',
   'Solar & Battery',
   'Battery Only',
+  'Battery Only - Additional',
   'HWHP Only',
   'HWHP & Battery',
   'HWHP, Solar & Battery',
