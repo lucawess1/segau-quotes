@@ -8,10 +8,12 @@ export const supabase = createClient(
 export type Package = {
   id: number
   package_code: string
+  product_set: string
   brand: string
-  battery_kwh: number
-  panel_count: number
-  system_size_kw: number
+  battery_kwh: number | null
+  panel_count: number | null
+  system_size_kw: number | null
+  specs: Record<string, any> | null
 }
 
 export type PriceVariant = {
