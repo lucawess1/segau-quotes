@@ -12,8 +12,8 @@ export default function QuoteBuilder() {
   const [variants, setVariants] = useState<PriceVariant[]>([])
 
   const [brand, setBrand] = useState('ALPHA')
-  const [batteryKwh, setBatteryKwh] = useState(10)
-  const [panels, setPanels] = useState(15)
+  const [batteryKwh, setBatteryKwh] = useState<number>(10)
+  const [panels, setPanels] = useState<number>(15)
   const [territory, setTerritory] = useState<'Metro' | 'Regional'>('Metro')
   const [zone, setZone] = useState(3)
   const [financeTerm, setFinanceTerm] = useState<'Cash' | '60m' | '84m'>('60m')
@@ -34,11 +34,14 @@ export default function QuoteBuilder() {
   }, [])
 
   // Find the matching package
-  const matchedPackage = packages.find(p =>
-    p.brand === brand &&
-    p.battery_kwh === batteryKwh &&
-    p.panel_count === panels
-  )
+  // Handles solar-only (battery=0), battery-only (panels=0), and combo configurations.
+  // Treats null/undefined battery_kwh or panel_count in DB as 0 so we match "none" selections.
+  const matchedPackage = packages.find(p => {
+    const pkgBattery = p.battery_kwh ?? 0
+    const pkgPanels = p.panel_count ?? 0
+    const brandMatches = batteryKwh === 0 ? true : p.brand === brand
+    return brandMatches && pkgBattery === batteryKwh && pkgPanels === panels
+  })
 
   // Find the price for current selections
   const variant = variants.find(v =>
@@ -57,11 +60,6 @@ export default function QuoteBuilder() {
   const stc = variant?.stc_discount ?? 0
   const afterStc = variant?.price_after_stc ?? 0
   const total = afterStc + extrasTotal
-  const cashEquiv = variants.find(v =>
-    v.package_id === matchedPackage?.id &&
-    v.territory === territory && v.zone === zone && v.finance_term === 'Cash'
-  )?.price_after_stc ?? 0
-  const financeLoading = financeTerm === 'Cash' ? 0 : afterStc - cashEquiv
   const fortnightly = variant?.fortnightly_repay ?? 0
 
   const quotedItems = selectedExtras.filter(e => e.charge_type === 'QUOTED').length
@@ -104,9 +102,10 @@ export default function QuoteBuilder() {
           <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
 
             <div className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-2.5 items-center text-sm">
-              <label className="text-gray-500">Brand</label>
+              <label className="text-gray-500">Battery brand</label>
               <select value={brand} onChange={e => setBrand(e.target.value)}
-                className="h-9 px-3 border border-gray-200 rounded-md bg-white">
+                disabled={batteryKwh === 0}
+                className="h-9 px-3 border border-gray-200 rounded-md bg-white disabled:bg-gray-50 disabled:text-gray-400">
                 <option>ALPHA</option>
                 <option>ANKER</option>
                 <option>GIV</option>
@@ -115,6 +114,7 @@ export default function QuoteBuilder() {
               <label className="text-gray-500">Battery size</label>
               <select value={batteryKwh} onChange={e => setBatteryKwh(Number(e.target.value))}
                 className="h-9 px-3 border border-gray-200 rounded-md bg-white">
+                <option value={0}>None</option>
                 <option value={5}>5 kWh</option>
                 <option value={10}>10 kWh</option>
                 <option value={15}>15 kWh</option>
@@ -123,9 +123,11 @@ export default function QuoteBuilder() {
 
               <label className="text-gray-500">Panels</label>
               <div className="flex items-center gap-3">
-                <input type="range" min={7} max={31} value={panels}
+                <input type="range" min={0} max={31} value={panels}
                   onChange={e => setPanels(Number(e.target.value))} className="flex-1" />
-                <span className="text-sm font-medium min-w-[80px] text-right">{panels} ({systemSize} kW)</span>
+                <span className="text-sm font-medium min-w-[80px] text-right">
+                  {panels === 0 ? 'None' : `${panels} (${systemSize} kW)`}
+                </span>
               </div>
 
               <label className="text-gray-500">Package</label>
@@ -134,7 +136,10 @@ export default function QuoteBuilder() {
                   {matchedPackage?.package_code ?? 'No match'}
                 </code>
                 <span className="text-xs text-gray-500 truncate">
-                  {brand}-{batteryKwh}kW DC + {systemSize}kW PV
+                  {[
+                    batteryKwh > 0 ? `${brand}-${batteryKwh}kW DC` : null,
+                    panels > 0 ? `${systemSize}kW PV` : null,
+                  ].filter(Boolean).join(' + ') || 'Nothing selected'}
                 </span>
               </div>
             </div>
@@ -242,7 +247,6 @@ export default function QuoteBuilder() {
               <Line label="Base package" value={formatCurrency(base)} />
               <Line label={`STC discount (ZN${zone})`} value={`−${formatCurrency(stc)}`} valueColor="text-green-600" />
               <Line label={`Extras (${selectedExtras.length})`} value={formatCurrency(extrasTotal)} />
-              <Line label={`Finance loading (${financeTerm})`} value={financeTerm === 'Cash' ? '—' : formatCurrency(financeLoading)} />
             </div>
 
             <div className={`mt-3 px-3 py-2.5 rounded-md flex gap-2 items-start ${quotedItems > 0 ? 'bg-amber-50' : 'bg-blue-50'}`}>
