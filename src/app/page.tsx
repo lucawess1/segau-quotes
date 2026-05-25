@@ -1,24 +1,59 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { supabase, type Package, type PriceVariant, type Extra } from '@/lib/supabase'
 import { Zap, User, Plus, X, FileText, ArrowLeftRight, Save, Info } from 'lucide-react'
 
 type QuoteExtra = Extra & { instanceId: string }
+
+// Product sets that include each component
+const HAS_BATTERY = ['Solar & Battery', 'Battery Only', 'HWHP & Battery', 'HWHP, Solar & Battery']
+const HAS_SOLAR = ['Solar Only', 'Solar & Battery', 'HWHP, Solar & Battery']
+const HAS_HWHP = ['HWHP Only', 'HWHP & Battery', 'HWHP, Solar & Battery']
+const HAS_HVAC = ['HVAC']
+
+// Product sets we expose in the UI (excludes "Additional Panels" - moved to extras - and any test rows)
+const VISIBLE_PRODUCT_SETS = [
+  'Solar Only',
+  'Solar & Battery',
+  'Battery Only',
+  'HWHP Only',
+  'HWHP & Battery',
+  'HWHP, Solar & Battery',
+  'HVAC',
+]
 
 export default function QuoteBuilder() {
   const [packages, setPackages] = useState<Package[]>([])
   const [extras, setExtras] = useState<Extra[]>([])
   const [variants, setVariants] = useState<PriceVariant[]>([])
 
-  const [brand, setBrand] = useState('ALPHA')
+  // Primary selector
+  const [productSet, setProductSet] = useState<string>('Solar & Battery')
+
+  // Component-specific selections (only used when relevant)
+  const [brand, setBrand] = useState<string>('ALPHA')
   const [batteryKwh, setBatteryKwh] = useState<number>(10)
   const [panels, setPanels] = useState<number>(15)
+  const [hwhpLitres, setHwhpLitres] = useState<number>(280)
+  const [hwhpModel, setHwhpModel] = useState<string>('EHPG VM')
+  const [hvacType, setHvacType] = useState<string>('Ducted')
+  const [hvacKw, setHvacKw] = useState<number>(13)
+
+  // Site & finance
   const [territory, setTerritory] = useState<'Metro' | 'Regional'>('Metro')
   const [zone, setZone] = useState(3)
   const [financeTerm, setFinanceTerm] = useState<'Cash' | '60m' | '84m'>('60m')
+
+  // Extras
   const [selectedExtras, setSelectedExtras] = useState<QuoteExtra[]>([])
   const [showExtraPicker, setShowExtraPicker] = useState(false)
+
+  // What's in this product set?
+  const includesBattery = HAS_BATTERY.includes(productSet)
+  const includesSolar = HAS_SOLAR.includes(productSet)
+  const includesHwhp = HAS_HWHP.includes(productSet)
+  const includesHvac = HAS_HVAC.includes(productSet)
 
   // Load reference data
   useEffect(() => {
@@ -33,17 +68,134 @@ export default function QuoteBuilder() {
     })
   }, [])
 
-  // Find the matching package
-  // Handles solar-only (battery=0), battery-only (panels=0), and combo configurations.
-  // Treats null/undefined battery_kwh or panel_count in DB as 0 so we match "none" selections.
-  const matchedPackage = packages.find(p => {
-    const pkgBattery = p.battery_kwh ?? 0
-    const pkgPanels = p.panel_count ?? 0
-    const brandMatches = batteryKwh === 0 ? true : p.brand === brand
-    return brandMatches && pkgBattery === batteryKwh && pkgPanels === panels
+  // Packages filtered to current product set
+  const setPackages_ = useMemo(
+    () => packages.filter(p => p.product_set === productSet),
+    [packages, productSet]
+  )
+
+  // Derived dropdown options from actual data
+  const availableBrands = useMemo(() => {
+    const set = new Set(setPackages_.map(p => p.brand).filter(b => b && b !== 'NA'))
+    return Array.from(set).sort()
+  }, [setPackages_])
+
+  const availableBatterySizes = useMemo(() => {
+    if (!includesBattery) return []
+    const sizes = new Set(
+      setPackages_
+        .filter(p => p.brand === brand)
+        .map(p => p.battery_kwh)
+        .filter((s): s is number => s !== null && s !== undefined && s > 0)
+    )
+    return Array.from(sizes).sort((a, b) => a - b)
+  }, [setPackages_, brand, includesBattery])
+
+  const panelRange = useMemo(() => {
+    if (!includesSolar) return { min: 0, max: 0 }
+    const matching = setPackages_.filter(p => {
+      if (includesBattery) return p.brand === brand && p.battery_kwh === batteryKwh
+      return true
+    })
+    const counts = matching.map(p => p.panel_count).filter((n): n is number => n !== null && n !== undefined && n > 0)
+    if (counts.length === 0) return { min: 0, max: 0 }
+    return { min: Math.min(...counts), max: Math.max(...counts) }
+  }, [setPackages_, brand, batteryKwh, includesSolar, includesBattery])
+
+  const availableHwhpLitres = useMemo(() => {
+    if (!includesHwhp) return []
+    const set = new Set(setPackages_.map(p => (p.specs as any)?.hwhp_litres).filter(Boolean))
+    return Array.from(set).sort((a, b) => a - b) as number[]
+  }, [setPackages_, includesHwhp])
+
+  const availableHwhpModels = useMemo(() => {
+    if (!includesHwhp) return []
+    const set = new Set(setPackages_.map(p => (p.specs as any)?.hwhp_model).filter(Boolean))
+    return Array.from(set).sort() as string[]
+  }, [setPackages_, includesHwhp])
+
+  const availableHvacTypes = useMemo(() => {
+    if (!includesHvac) return []
+    const set = new Set(setPackages_.map(p => (p.specs as any)?.hvac_type).filter(Boolean))
+    return Array.from(set).sort() as string[]
+  }, [setPackages_, includesHvac])
+
+  const availableHvacKws = useMemo(() => {
+    if (!includesHvac) return []
+    const set = new Set(
+      setPackages_
+        .filter(p => (p.specs as any)?.hvac_type === hvacType)
+        .map(p => (p.specs as any)?.hvac_kw)
+        .filter(Boolean)
+    )
+    return Array.from(set).sort((a, b) => a - b) as number[]
+  }, [setPackages_, hvacType, includesHvac])
+
+  // Auto-correct out-of-range selections when product set or upstream selection changes
+  useEffect(() => {
+    if (includesBattery && availableBrands.length > 0 && !availableBrands.includes(brand)) {
+      setBrand(availableBrands[0])
+    }
+  }, [availableBrands, brand, includesBattery])
+
+  useEffect(() => {
+    if (includesBattery && availableBatterySizes.length > 0 && !availableBatterySizes.includes(batteryKwh)) {
+      setBatteryKwh(availableBatterySizes[0])
+    }
+  }, [availableBatterySizes, batteryKwh, includesBattery])
+
+  useEffect(() => {
+    if (includesSolar && (panels < panelRange.min || panels > panelRange.max)) {
+      setPanels(panelRange.min)
+    }
+  }, [panelRange, panels, includesSolar])
+
+  useEffect(() => {
+    if (includesHwhp && availableHwhpLitres.length > 0 && !availableHwhpLitres.includes(hwhpLitres)) {
+      setHwhpLitres(availableHwhpLitres[0])
+    }
+  }, [availableHwhpLitres, hwhpLitres, includesHwhp])
+
+  useEffect(() => {
+    if (includesHwhp && availableHwhpModels.length > 0 && !availableHwhpModels.includes(hwhpModel)) {
+      setHwhpModel(availableHwhpModels[0])
+    }
+  }, [availableHwhpModels, hwhpModel, includesHwhp])
+
+  useEffect(() => {
+    if (includesHvac && availableHvacTypes.length > 0 && !availableHvacTypes.includes(hvacType)) {
+      setHvacType(availableHvacTypes[0])
+    }
+  }, [availableHvacTypes, hvacType, includesHvac])
+
+  useEffect(() => {
+    if (includesHvac && availableHvacKws.length > 0 && !availableHvacKws.includes(hvacKw)) {
+      setHvacKw(availableHvacKws[0])
+    }
+  }, [availableHvacKws, hvacKw, includesHvac])
+
+  // Match a package based on all the currently-relevant selections
+  const matchedPackage = setPackages_.find(p => {
+    const specs = (p.specs as any) || {}
+    if (includesBattery) {
+      if (p.brand !== brand) return false
+      if ((p.battery_kwh ?? 0) !== batteryKwh) return false
+    }
+    if (includesSolar) {
+      if ((p.panel_count ?? 0) !== panels) return false
+    }
+    if (includesHwhp) {
+      if (specs.hwhp_litres !== hwhpLitres) return false
+      if (specs.hwhp_model !== hwhpModel) return false
+    }
+    if (includesHvac) {
+      if (specs.hvac_type !== hvacType) return false
+      if (specs.hvac_kw !== hvacKw) return false
+    }
+    return true
   })
 
-  // Find the price for current selections
+  // Price lookup
   const variant = variants.find(v =>
     v.package_id === matchedPackage?.id &&
     v.territory === territory &&
@@ -76,7 +228,15 @@ export default function QuoteBuilder() {
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: 0 }).format(n)
 
-  const systemSize = (panels * 0.44).toFixed(2)
+  const systemSize = matchedPackage?.system_size_kw?.toFixed(2) ?? (panels * 0.44).toFixed(2)
+
+  // Build a friendly package description
+  const packageDescription = [
+    includesBattery ? `${brand}-${batteryKwh}kWh battery` : null,
+    includesSolar && panels > 0 ? `${systemSize}kW PV` : null,
+    includesHwhp ? `${hwhpLitres}L ${hwhpModel}` : null,
+    includesHvac ? `${hvacKw}kW ${hvacType}` : null,
+  ].filter(Boolean).join(' + ') || 'Nothing selected'
 
   return (
     <main className="max-w-5xl mx-auto p-6">
@@ -102,45 +262,79 @@ export default function QuoteBuilder() {
           <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
 
             <div className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-2.5 items-center text-sm">
-              <label className="text-gray-500">Battery brand</label>
-              <select value={brand} onChange={e => setBrand(e.target.value)}
-                disabled={batteryKwh === 0}
-                className="h-9 px-3 border border-gray-200 rounded-md bg-white disabled:bg-gray-50 disabled:text-gray-400">
-                <option>ALPHA</option>
-                <option>ANKER</option>
-                <option>GIV</option>
-              </select>
-
-              <label className="text-gray-500">Battery size</label>
-              <select value={batteryKwh} onChange={e => setBatteryKwh(Number(e.target.value))}
+              <label className="text-gray-500">Product type</label>
+              <select value={productSet} onChange={e => setProductSet(e.target.value)}
                 className="h-9 px-3 border border-gray-200 rounded-md bg-white">
-                <option value={0}>None</option>
-                <option value={5}>5 kWh</option>
-                <option value={10}>10 kWh</option>
-                <option value={15}>15 kWh</option>
-                <option value={20}>20 kWh</option>
+                {VISIBLE_PRODUCT_SETS.map(s => <option key={s}>{s}</option>)}
               </select>
 
-              <label className="text-gray-500">Panels</label>
-              <div className="flex items-center gap-3">
-                <input type="range" min={0} max={31} value={panels}
-                  onChange={e => setPanels(Number(e.target.value))} className="flex-1" />
-                <span className="text-sm font-medium min-w-[80px] text-right">
-                  {panels === 0 ? 'None' : `${panels} (${systemSize} kW)`}
-                </span>
-              </div>
+              {includesBattery && (
+                <>
+                  <label className="text-gray-500">Battery brand</label>
+                  <select value={brand} onChange={e => setBrand(e.target.value)}
+                    className="h-9 px-3 border border-gray-200 rounded-md bg-white">
+                    {availableBrands.map(b => <option key={b}>{b}</option>)}
+                  </select>
+
+                  <label className="text-gray-500">Battery size</label>
+                  <select value={batteryKwh} onChange={e => setBatteryKwh(Number(e.target.value))}
+                    className="h-9 px-3 border border-gray-200 rounded-md bg-white">
+                    {availableBatterySizes.map(s => <option key={s} value={s}>{s} kWh</option>)}
+                  </select>
+                </>
+              )}
+
+              {includesSolar && panelRange.max > 0 && (
+                <>
+                  <label className="text-gray-500">Panels</label>
+                  <div className="flex items-center gap-3">
+                    <input type="range" min={panelRange.min} max={panelRange.max} value={panels}
+                      onChange={e => setPanels(Number(e.target.value))} className="flex-1" />
+                    <span className="text-sm font-medium min-w-[80px] text-right">
+                      {panels} ({systemSize} kW)
+                    </span>
+                  </div>
+                </>
+              )}
+
+              {includesHwhp && (
+                <>
+                  <label className="text-gray-500">HWHP tank</label>
+                  <select value={hwhpLitres} onChange={e => setHwhpLitres(Number(e.target.value))}
+                    className="h-9 px-3 border border-gray-200 rounded-md bg-white">
+                    {availableHwhpLitres.map(l => <option key={l} value={l}>{l}L</option>)}
+                  </select>
+
+                  <label className="text-gray-500">HWHP model</label>
+                  <select value={hwhpModel} onChange={e => setHwhpModel(e.target.value)}
+                    className="h-9 px-3 border border-gray-200 rounded-md bg-white">
+                    {availableHwhpModels.map(m => <option key={m}>{m}</option>)}
+                  </select>
+                </>
+              )}
+
+              {includesHvac && (
+                <>
+                  <label className="text-gray-500">HVAC type</label>
+                  <select value={hvacType} onChange={e => setHvacType(e.target.value)}
+                    className="h-9 px-3 border border-gray-200 rounded-md bg-white">
+                    {availableHvacTypes.map(t => <option key={t}>{t}</option>)}
+                  </select>
+
+                  <label className="text-gray-500">HVAC capacity</label>
+                  <select value={hvacKw} onChange={e => setHvacKw(Number(e.target.value))}
+                    className="h-9 px-3 border border-gray-200 rounded-md bg-white">
+                    {availableHvacKws.map(k => <option key={k} value={k}>{k} kW</option>)}
+                  </select>
+                </>
+              )}
 
               <label className="text-gray-500">Package</label>
               <div className="flex items-center gap-2 min-w-0">
                 <code className="text-xs bg-gray-100 px-2 py-1 rounded">
                   {matchedPackage?.package_code ?? 'No match'}
                 </code>
-                <span className="text-xs text-gray-500 truncate">
-                  {[
-                    batteryKwh > 0 ? `${brand}-${batteryKwh}kW DC` : null,
-                    panels > 0 ? `${systemSize}kW PV` : null,
-                  ].filter(Boolean).join(' + ') || 'Nothing selected'}
-                </span>
+                <span className="text-xs text-gray-500 truncate">{packageDescription}</span>
               </div>
             </div>
 
