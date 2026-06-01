@@ -431,22 +431,23 @@ export default function QuoteBuilder() {
   ].filter(Boolean).join(' + ') || 'Nothing selected'
 
   return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
     <main className="max-w-5xl mx-auto p-3 md:p-6 pb-24 md:pb-6">
-      <header className="flex items-center justify-between pb-3 mb-4 md:mb-5 border-b border-gray-200 gap-2">
+      <header className="flex items-center justify-between pb-3 mb-4 md:mb-5 border-b border-gray-200 dark:border-gray-700 gap-2">
         <div className="flex items-center gap-2 md:gap-2.5 min-w-0">
-          <Zap className="w-5 h-5 text-blue-600 flex-shrink-0" />
+          <Zap className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
           <div className="min-w-0">
             <p className="font-medium text-sm md:text-[15px] truncate">SEGAU Quote Builder</p>
-            <p className="hidden md:block text-xs text-gray-500">Pricing v2026.05.05 · last updated 5 May</p>
+            <p className="hidden md:block text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">Pricing v2026.05.05 · last updated 5 May</p>
           </div>
         </div>
         <div className="flex items-center gap-1 md:gap-3 flex-shrink-0">
-          <div className="flex items-center gap-1.5 text-xs text-gray-500 max-w-[120px] md:max-w-none">
+          <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500 max-w-[120px] md:max-w-none">
             <User className="w-3.5 h-3.5 flex-shrink-0" />
             <span className="truncate">
               {profile?.full_name?.split(' ')[0] || profile?.email?.split('@')[0] || '…'}
               {profile?.role === 'admin' && (
-                <span className="ml-1.5 text-[10px] uppercase tracking-wide bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                <span className="ml-1.5 text-[10px] uppercase tracking-wide bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
                   Admin
                 </span>
               )}
@@ -454,7 +455,7 @@ export default function QuoteBuilder() {
           </div>
           <button
             onClick={signOut}
-            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 p-1.5 md:px-2 md:py-1 hover:bg-gray-50 rounded"
+            className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:text-gray-200 p-1.5 md:px-2 md:py-1 hover:bg-gray-50 dark:hover:bg-gray-800 rounded"
             title="Sign out"
             aria-label="Sign out"
           >
@@ -466,27 +467,27 @@ export default function QuoteBuilder() {
 
       <div className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr] gap-4">
         <div>
-          <p className="text-xs font-medium text-gray-500 mb-2">1. System</p>
-          <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-500 mb-2">1. System</p>
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-4">
 
             <div className="flex flex-col gap-3 text-sm md:grid md:grid-cols-[110px_1fr] md:gap-x-3 md:gap-y-2.5 md:items-center">
-              <label className="text-gray-500">Product type</label>
+              <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Product type</label>
               <select value={productSet} onChange={e => setProductSet(e.target.value)}
-                className="h-11 md:h-9 px-3 border border-gray-200 rounded-md bg-white text-base md:text-sm">
+                className="h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm">
                 {VISIBLE_PRODUCT_SETS.map(s => <option key={s}>{s}</option>)}
               </select>
 
               {includesBattery && (
                 <>
-                  <label className="text-gray-500">Battery brand</label>
+                  <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Battery brand</label>
                   <select value={brand} onChange={e => setBrand(e.target.value)}
-                    className="h-11 md:h-9 px-3 border border-gray-200 rounded-md bg-white text-base md:text-sm">
+                    className="h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm">
                     {availableBrands.map(b => <option key={b}>{b}</option>)}
                   </select>
 
-                  <label className="text-gray-500">Battery size</label>
+                  <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Battery size</label>
                   <select value={batteryKwh} onChange={e => setBatteryKwh(Number(e.target.value))}
-                    className="h-11 md:h-9 px-3 border border-gray-200 rounded-md bg-white text-base md:text-sm">
+                    className="h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm">
                     {availableBatterySizes.map(s => <option key={s} value={s}>{s} kWh</option>)}
                   </select>
                 </>
@@ -494,7 +495,7 @@ export default function QuoteBuilder() {
 
               {includesSolar && panelRange.max > 0 && (
                 <>
-                  <label className="text-gray-500">Panels</label>
+                  <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Panels</label>
                   <div className="flex items-center gap-3">
                     <input type="range" min={panelRange.min} max={panelRange.max} value={panels}
                       onChange={e => setPanels(Number(e.target.value))} className="flex-1" />
@@ -507,7 +508,7 @@ export default function QuoteBuilder() {
 
               {showPhaseFilter && (
                 <>
-                  <label className="text-gray-500">Phase</label>
+                  <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Phase</label>
                   <SegmentedControl
                     value={inverterPhase}
                     options={availablePhases}
@@ -518,7 +519,7 @@ export default function QuoteBuilder() {
 
               {showParalleledFilter && (
                 <>
-                  <label className="text-gray-500">Inverter</label>
+                  <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Inverter</label>
                   <SegmentedControl
                     value={inverterParalleled ? 'paralleled' : 'single'}
                     options={availableParalleled.map(v => v ? 'paralleled' : 'single')}
@@ -530,9 +531,9 @@ export default function QuoteBuilder() {
 
               {includesHwhp && (
                 <>
-                  <label className="text-gray-500">HWHP tank</label>
+                  <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">HWHP tank</label>
                   <select value={hwhpLitres} onChange={e => setHwhpLitres(Number(e.target.value))}
-                    className="h-11 md:h-9 px-3 border border-gray-200 rounded-md bg-white text-base md:text-sm">
+                    className="h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm">
                     {availableHwhpLitres.map(l => <option key={l} value={l}>{l}L</option>)}
                   </select>
                 </>
@@ -540,40 +541,40 @@ export default function QuoteBuilder() {
 
               {includesHvac && (
                 <>
-                  <label className="text-gray-500">HVAC type</label>
+                  <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">HVAC type</label>
                   <select value={hvacType} onChange={e => setHvacType(e.target.value)}
-                    className="h-11 md:h-9 px-3 border border-gray-200 rounded-md bg-white text-base md:text-sm">
+                    className="h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm">
                     {availableHvacTypes.map(t => <option key={t}>{t}</option>)}
                   </select>
 
-                  <label className="text-gray-500">HVAC capacity</label>
+                  <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">HVAC capacity</label>
                   <select value={hvacKw} onChange={e => setHvacKw(Number(e.target.value))}
-                    className="h-11 md:h-9 px-3 border border-gray-200 rounded-md bg-white text-base md:text-sm">
+                    className="h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm">
                     {availableHvacKws.map(k => <option key={k} value={k}>{k} kW</option>)}
                   </select>
                 </>
               )}
 
-              <label className="text-gray-500">Package</label>
+              <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Package</label>
               <div className="flex flex-col md:flex-row md:items-center gap-1.5 md:gap-2 min-w-0">
-                <code className="text-xs bg-gray-100 px-2 py-1 rounded break-all md:break-normal">
+                <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded break-all md:break-normal">
                   {matchedPackage?.package_code ?? 'No match'}
                 </code>
-                <span className="text-xs text-gray-500 md:truncate">{packageDescription}</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500 md:truncate">{packageDescription}</span>
               </div>
             </div>
 
-            <div className="pt-3 border-t border-gray-200">
-              <p className="text-xs font-medium text-gray-500 mb-2">2. Site & finance</p>
+            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-500 mb-2">2. Site & finance</p>
               <div className="flex flex-col gap-3 text-sm md:grid md:grid-cols-[110px_1fr] md:gap-x-3 md:gap-y-2.5 md:items-center">
-                <label className="text-gray-500">Territory</label>
+                <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Territory</label>
                 <SegmentedControl
                   value={territory}
                   options={['Metro', 'Regional']}
                   onChange={v => setTerritory(v as 'Metro' | 'Regional')}
                 />
 
-                <label className="text-gray-500">STC zone</label>
+                <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">STC zone</label>
                 <SegmentedControl
                   value={String(zone)}
                   options={['1', '2', '3', '4']}
@@ -581,7 +582,7 @@ export default function QuoteBuilder() {
                   onChange={v => setZone(Number(v))}
                 />
 
-                <label className="text-gray-500">Finance</label>
+                <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Finance</label>
                 <SegmentedControl
                   value={financeTerm}
                   options={['Cash', '60m', '84m']}
@@ -591,22 +592,22 @@ export default function QuoteBuilder() {
               </div>
             </div>
 
-            <div className="pt-3 border-t border-gray-200">
+            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-medium text-gray-500">3. Extras</p>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-500">3. Extras</p>
                 <button onClick={() => setShowExtraPicker(!showExtraPicker)}
-                  className="text-xs px-2.5 py-1 border border-gray-200 rounded-md hover:bg-gray-50 flex items-center gap-1">
+                  className="text-xs px-2.5 py-1 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1">
                   <Plus className="w-3 h-3" /> Add
                 </button>
               </div>
 
               {showExtraPicker && (
-                <div className="mb-2 border border-gray-200 rounded-md p-2 max-h-48 overflow-y-auto text-sm">
+                <div className="mb-2 border border-gray-200 dark:border-gray-700 rounded-md p-2 max-h-48 overflow-y-auto text-sm">
                   {extras.map(e => (
                     <button key={e.id} onClick={() => addExtra(e)}
-                      className="w-full text-left px-2 py-1.5 hover:bg-gray-100 rounded flex justify-between items-center">
+                      className="w-full text-left px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex justify-between items-center">
                       <span>{e.name}</span>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">
                         {e.charge_type === 'Per Panel' ? `$${e.unit_price}/panel` : formatCurrency(e.unit_price)}
                       </span>
                     </button>
@@ -616,24 +617,24 @@ export default function QuoteBuilder() {
 
               <div className="space-y-1.5 text-sm">
                 {selectedExtras.length === 0 && (
-                  <p className="text-xs text-gray-400 italic py-2">No extras added yet</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 italic py-2">No extras added yet</p>
                 )}
                 {selectedExtras.map(e => {
                   const lineTotal = e.charge_type === 'Per Panel' ? e.unit_price * panels : e.unit_price
                   return (
-                    <div key={e.instanceId} className="flex items-center justify-between bg-gray-50 rounded-md px-2.5 py-2">
+                    <div key={e.instanceId} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 rounded-md px-2.5 py-2">
                       <div className="flex items-center gap-2 min-w-0">
                         <Badge type={e.charge_type} />
                         <span className="truncate">{e.name}</span>
                       </div>
                       <div className="flex items-center gap-2.5 flex-shrink-0">
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">
                           {e.charge_type === 'Per Panel' ? `$${e.unit_price} × ${panels}` :
                            e.charge_type === 'QUOTED' ? 'est.' : ''}
                         </span>
                         <span className="font-medium min-w-[60px] text-right">{formatCurrency(lineTotal)}</span>
                         <button onClick={() => removeExtra(e.instanceId)}
-                          className="p-1 hover:bg-gray-200 rounded" aria-label="Remove">
+                          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded" aria-label="Remove">
                           <X className="w-3 h-3" />
                         </button>
                       </div>
@@ -646,30 +647,30 @@ export default function QuoteBuilder() {
         </div>
 
         <div>
-          <p className="text-xs font-medium text-gray-500 mb-2">Quote summary</p>
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-500 mb-2">Quote summary</p>
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
             <div className="flex items-baseline justify-between mb-1">
-              <span className="text-sm text-gray-500">Total (inc GST)</span>
+              <span className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-500">Total (inc GST)</span>
               <span className="text-2xl font-medium">{formatCurrency(total)}</span>
             </div>
-            <div className="flex items-baseline justify-between pb-3 border-b border-gray-200">
-              <span className="text-xs text-gray-400">
+            <div className="flex items-baseline justify-between pb-3 border-b border-gray-200 dark:border-gray-700">
+              <span className="text-xs text-gray-400 dark:text-gray-500">
                 {financeTerm === 'Cash' ? 'One-off payment' : `Fortnightly · BNPL ${financeTerm}`}
               </span>
-              <span className="text-sm font-medium text-blue-600">
+              <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
                 {financeTerm === 'Cash' ? 'Paid upfront' : `$${Math.round(fortnightly)} / fn`}
               </span>
             </div>
 
             <div className="mt-3 text-sm space-y-1">
               <Line label="Base package" value={formatCurrency(base)} />
-              <Line label={`STC discount (ZN${zone})`} value={`−${formatCurrency(stc)}`} valueColor="text-green-600" />
+              <Line label={`STC discount (ZN${zone})`} value={`−${formatCurrency(stc)}`} valueColor="text-green-600 dark:text-green-400" />
               <Line label={`Extras (${selectedExtras.length})`} value={formatCurrency(extrasTotal)} />
             </div>
 
             {matchedPackage && (
-              <div className="mt-4 pt-3 border-t border-gray-200">
-                <p className="text-xs font-medium text-gray-500 mb-2">Specifications</p>
+              <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-500 mb-2">Specifications</p>
                 <div className="space-y-2">
                   {includesBattery && (
                     <SpecGroup title="Battery">
@@ -719,9 +720,9 @@ export default function QuoteBuilder() {
               </div>
             )}
 
-            <div className={`mt-3 px-3 py-2.5 rounded-md flex gap-2 items-start ${quotedItems > 0 ? 'bg-amber-50' : 'bg-blue-50'}`}>
-              <Info className={`w-4 h-4 flex-shrink-0 mt-0.5 ${quotedItems > 0 ? 'text-amber-700' : 'text-blue-700'}`} />
-              <p className={`text-xs leading-relaxed ${quotedItems > 0 ? 'text-amber-700' : 'text-blue-700'}`}>
+            <div className={`mt-3 px-3 py-2.5 rounded-md flex gap-2 items-start ${quotedItems > 0 ? 'bg-amber-50 dark:bg-amber-950/50' : 'bg-blue-50 dark:bg-blue-950/50'}`}>
+              <Info className={`w-4 h-4 flex-shrink-0 mt-0.5 ${quotedItems > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-300'}`} />
+              <p className={`text-xs leading-relaxed ${quotedItems > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-300'}`}>
                 {quotedItems > 0
                   ? `Includes ${quotedItems} QUOTED item${quotedItems > 1 ? 's' : ''} — confirm with Tech before sending.`
                   : 'All prices fixed — ready to send to customer.'}
@@ -732,12 +733,12 @@ export default function QuoteBuilder() {
               <button
                 onClick={() => setShowSaveDialog(true)}
                 disabled={!matchedPackage}
-                className="hidden md:flex w-full py-2 text-sm border rounded-md transition-colors items-center justify-center gap-1.5 bg-gray-900 text-white border-gray-900 hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="hidden md:flex w-full py-2 text-sm border rounded-md transition-colors items-center justify-center gap-1.5 bg-gray-900 dark:bg-gray-700 text-white border-gray-900 dark:border-gray-700 hover:bg-gray-800 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Save className="w-3.5 h-3.5" /> Save quote
               </button>
               {savedConfirmation && (
-                <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
+                <div className="text-xs text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-800 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
                   <Check className="w-3.5 h-3.5 flex-shrink-0" />
                   Saved as <code className="font-mono">{savedConfirmation}</code>
                 </div>
@@ -751,26 +752,26 @@ export default function QuoteBuilder() {
       <section className="mt-8">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <History className="w-3.5 h-3.5 text-gray-400" />
-            <p className="text-xs font-medium text-gray-500">
+            <History className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-500">
               {profile?.role === 'admin' ? 'Recent quotes — all users (last 20)' : 'Your recent quotes (last 20)'}
             </p>
           </div>
-          <button onClick={loadRecentQuotes} className="text-xs text-gray-500 hover:text-gray-700">
+          <button onClick={loadRecentQuotes} className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:text-gray-200">
             Refresh
           </button>
         </div>
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
           {loadingQuotes ? (
-            <p className="text-xs text-gray-400 italic p-4 text-center">Loading…</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 italic p-4 text-center">Loading…</p>
           ) : recentQuotes.length === 0 ? (
-            <p className="text-xs text-gray-400 italic p-4 text-center">No saved quotes yet</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 italic p-4 text-center">No saved quotes yet</p>
           ) : (
             <>
               {/* Desktop: table */}
               <table className="hidden md:table w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr className="text-xs text-gray-500">
+                <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                  <tr className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">
                     <th className="text-left font-medium px-3 py-2">Quote #</th>
                     <th className="text-left font-medium px-3 py-2">Nickname</th>
                     <th className="text-left font-medium px-3 py-2">Customer</th>
@@ -783,11 +784,11 @@ export default function QuoteBuilder() {
                 </thead>
                 <tbody>
                   {recentQuotes.map(q => (
-                    <tr key={q.id} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
-                      <td className="px-3 py-2 font-mono text-xs text-gray-600">{q.quote_number}</td>
-                      <td className="px-3 py-2 text-xs">{q.nickname || <span className="text-gray-300">—</span>}</td>
-                      <td className="px-3 py-2 text-xs">{q.customer_name || <span className="text-gray-300">—</span>}</td>
-                      <td className="px-3 py-2 text-xs text-gray-600">
+                    <tr key={q.id} className="border-b border-gray-100 dark:border-gray-800 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800">
+                      <td className="px-3 py-2 font-mono text-xs text-gray-600 dark:text-gray-300 dark:text-gray-600">{q.quote_number}</td>
+                      <td className="px-3 py-2 text-xs">{q.nickname || <span className="text-gray-300 dark:text-gray-600">—</span>}</td>
+                      <td className="px-3 py-2 text-xs">{q.customer_name || <span className="text-gray-300 dark:text-gray-600">—</span>}</td>
+                      <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-300 dark:text-gray-600">
                         {[
                           q.product_set,
                           q.brand && `${q.brand}`,
@@ -795,10 +796,10 @@ export default function QuoteBuilder() {
                           q.panel_count ? `${q.panel_count}p` : null,
                         ].filter(Boolean).join(' · ')}
                       </td>
-                      <td className="px-3 py-2 text-xs text-gray-600">{q.territory ? `${q.territory} ZN${q.zone}` : '—'}</td>
-                      <td className="px-3 py-2 text-xs text-gray-600">{q.finance_term}</td>
+                      <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-300 dark:text-gray-600">{q.territory ? `${q.territory} ZN${q.zone}` : '—'}</td>
+                      <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-300 dark:text-gray-600">{q.finance_term}</td>
                       <td className="px-3 py-2 text-xs font-medium text-right">{q.total_price !== null ? formatCurrency(q.total_price) : '—'}</td>
-                      <td className="px-3 py-2 text-xs text-gray-500">{formatRelativeDate(q.created_at)}</td>
+                      <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">{formatRelativeDate(q.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -807,21 +808,21 @@ export default function QuoteBuilder() {
               {/* Mobile: cards */}
               <div className="md:hidden divide-y divide-gray-100">
                 {recentQuotes.map(q => (
-                  <div key={q.id} className="p-3 hover:bg-gray-50">
+                  <div key={q.id} className="p-3 hover:bg-gray-50 dark:hover:bg-gray-800">
                     <div className="flex items-start justify-between gap-2 mb-1">
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate">
                           {q.nickname || q.customer_name || q.quote_number}
                         </p>
                         {(q.nickname && q.customer_name) && (
-                          <p className="text-xs text-gray-500 truncate">{q.customer_name}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500 truncate">{q.customer_name}</p>
                         )}
                       </div>
                       <p className="text-sm font-medium flex-shrink-0">
                         {q.total_price !== null ? formatCurrency(q.total_price) : '—'}
                       </p>
                     </div>
-                    <p className="text-xs text-gray-600 truncate">
+                    <p className="text-xs text-gray-600 dark:text-gray-300 dark:text-gray-600 truncate">
                       {[
                         q.product_set,
                         q.brand,
@@ -829,7 +830,7 @@ export default function QuoteBuilder() {
                         q.panel_count ? `${q.panel_count}p` : null,
                       ].filter(Boolean).join(' · ')}
                     </p>
-                    <div className="flex items-center justify-between mt-1.5 text-[11px] text-gray-400">
+                    <div className="flex items-center justify-between mt-1.5 text-[11px] text-gray-400 dark:text-gray-500">
                       <span className="font-mono">{q.quote_number}</span>
                       <span>
                         {q.territory && `${q.territory} ZN${q.zone} · `}
@@ -847,51 +848,51 @@ export default function QuoteBuilder() {
       {/* Save dialog */}
       {showSaveDialog && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => !saving && setShowSaveDialog(false)}>
-          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <p className="font-medium">Save quote</p>
-              <button onClick={() => !saving && setShowSaveDialog(false)} className="p-1 hover:bg-gray-100 rounded">
+              <button onClick={() => !saving && setShowSaveDialog(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Nickname (optional)</label>
+                <label className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500 mb-1 block">Nickname (optional)</label>
                 <input
                   type="text"
                   value={saveNickname}
                   onChange={e => setSaveNickname(e.target.value)}
                   placeholder="e.g. Smith family — option A"
-                  className="w-full h-11 md:h-9 px-3 border border-gray-200 rounded-md text-base md:text-sm focus:outline-none focus:border-gray-400"
+                  className="w-full h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md text-base md:text-sm focus:outline-none focus:border-gray-400"
                   autoFocus
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Customer name (optional)</label>
+                <label className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500 mb-1 block">Customer name (optional)</label>
                 <input
                   type="text"
                   value={saveCustomerName}
                   onChange={e => setSaveCustomerName(e.target.value)}
                   placeholder="e.g. John Smith"
-                  className="w-full h-11 md:h-9 px-3 border border-gray-200 rounded-md text-base md:text-sm focus:outline-none focus:border-gray-400"
+                  className="w-full h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md text-base md:text-sm focus:outline-none focus:border-gray-400"
                 />
               </div>
-              <div className="bg-gray-50 rounded-md px-3 py-2 text-xs text-gray-600 space-y-0.5">
-                <div className="flex justify-between"><span>Configuration:</span><span className="text-gray-900">{packageDescription}</span></div>
-                <div className="flex justify-between"><span>Total:</span><span className="text-gray-900 font-medium">{formatCurrency(total)}</span></div>
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-md px-3 py-2 text-xs text-gray-600 dark:text-gray-300 dark:text-gray-600 space-y-0.5">
+                <div className="flex justify-between"><span>Configuration:</span><span className="text-gray-900 dark:text-gray-100">{packageDescription}</span></div>
+                <div className="flex justify-between"><span>Total:</span><span className="text-gray-900 dark:text-gray-100 font-medium">{formatCurrency(total)}</span></div>
               </div>
               <div className="flex gap-2 pt-1">
                 <button
                   onClick={() => setShowSaveDialog(false)}
                   disabled={saving}
-                  className="flex-1 py-2.5 md:py-2 text-sm border border-gray-200 rounded-md hover:bg-gray-50 disabled:opacity-50 min-h-[44px] md:min-h-0"
+                  className="flex-1 py-2.5 md:py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 min-h-[44px] md:min-h-0"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={saveQuote}
                   disabled={saving}
-                  className="flex-1 py-2.5 md:py-2 text-sm bg-gray-900 text-white rounded-md hover:bg-gray-800 disabled:opacity-50 min-h-[44px] md:min-h-0"
+                  className="flex-1 py-2.5 md:py-2 text-sm bg-gray-900 dark:bg-gray-700 text-white rounded-md hover:bg-gray-800 dark:hover:bg-gray-600 disabled:opacity-50 min-h-[44px] md:min-h-0"
                 >
                   {saving ? 'Saving…' : 'Save'}
                 </button>
@@ -902,9 +903,9 @@ export default function QuoteBuilder() {
       )}
 
       {/* Sticky bottom bar - mobile only */}
-      <div className="fixed bottom-0 left-0 right-0 md:hidden bg-white border-t border-gray-200 px-3 py-2.5 flex items-center gap-3 shadow-lg z-40">
+      <div className="fixed bottom-0 left-0 right-0 md:hidden bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-3 py-2.5 flex items-center gap-3 shadow-lg z-40">
         <div className="flex-1 min-w-0">
-          <p className="text-[11px] text-gray-500 leading-tight">
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 dark:text-gray-500 leading-tight">
             {financeTerm === 'Cash' ? 'Total (inc GST)' : `BNPL ${financeTerm} · $${Math.round(fortnightly)}/fn`}
           </p>
           <p className="text-lg font-medium leading-tight">{formatCurrency(total)}</p>
@@ -912,13 +913,14 @@ export default function QuoteBuilder() {
         <button
           onClick={() => setShowSaveDialog(true)}
           disabled={!matchedPackage}
-          className="px-4 py-2.5 bg-gray-900 text-white rounded-md text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 min-h-[44px]"
+          className="px-4 py-2.5 bg-gray-900 dark:bg-gray-700 text-white rounded-md text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 min-h-[44px]"
         >
           <Save className="w-4 h-4" />
           Save
         </button>
       </div>
     </main>
+    </div>
   )
 }
 
@@ -947,8 +949,8 @@ function SegmentedControl({ value, options, labels, labelPrefix, onChange }: {
         <button key={opt} onClick={() => onChange(opt)}
           className={`flex-1 px-2.5 py-2.5 md:py-1.5 text-sm border rounded-md transition-colors min-h-[44px] md:min-h-0 ${
             value === opt
-              ? 'bg-gray-100 border-gray-300 font-medium'
-              : 'bg-transparent border-gray-200 text-gray-500 hover:bg-gray-50'
+              ? 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 font-medium'
+              : 'bg-transparent border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800'
           }`}>
           {labels ? labels[i] : labelPrefix ? `${labelPrefix}${opt}` : opt}
         </button>
@@ -959,22 +961,22 @@ function SegmentedControl({ value, options, labels, labelPrefix, onChange }: {
 
 function Badge({ type }: { type: string }) {
   const colors: Record<string, string> = {
-    'Per Panel': 'bg-blue-50 text-blue-800',
-    'Flat Fee': 'bg-gray-100 text-gray-700',
-    'QUOTED': 'bg-amber-50 text-amber-800',
-    'Variable': 'bg-purple-50 text-purple-800',
+    'Per Panel': 'bg-blue-50 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300',
+    'Flat Fee': 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200',
+    'QUOTED': 'bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-400',
+    'Variable': 'bg-purple-50 dark:bg-purple-950/50 text-purple-800 dark:text-purple-400',
   }
   const labels: Record<string, string> = {
     'Per Panel': 'Per panel', 'Flat Fee': 'Flat', 'QUOTED': 'Quoted', 'Variable': 'Variable'
   }
-  return <span className={`text-[11px] px-1.5 py-0.5 rounded ${colors[type] ?? 'bg-gray-100'}`}>{labels[type] ?? type}</span>
+  return <span className={`text-[11px] px-1.5 py-0.5 rounded ${colors[type] ?? 'bg-gray-100 dark:bg-gray-800'}`}>{labels[type] ?? type}</span>
 }
 
 function Line({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
   return (
-    <div className="flex justify-between py-0.5 text-gray-500">
+    <div className="flex justify-between py-0.5 text-gray-500 dark:text-gray-400 dark:text-gray-500">
       <span>{label}</span>
-      <span className={valueColor ?? 'text-gray-900'}>{value}</span>
+      <span className={valueColor ?? 'text-gray-900 dark:text-gray-100'}>{value}</span>
     </div>
   )
 }
@@ -982,7 +984,7 @@ function Line({ label, value, valueColor }: { label: string; value: string; valu
 function SpecGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-1">{title}</p>
+      <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">{title}</p>
       <div className="space-y-0.5">{children}</div>
     </div>
   )
@@ -1000,12 +1002,12 @@ function SpecRow({ label, value, fallback }: {
   const isFallback = isEmpty && !!fallback
   return (
     <div className="flex justify-between text-xs gap-2">
-      <span className="text-gray-500 flex-shrink-0">{label}</span>
+      <span className="text-gray-500 dark:text-gray-400 dark:text-gray-500 flex-shrink-0">{label}</span>
       <span
         className={
-          isMissing ? 'text-amber-600 italic' :
-          isFallback ? 'text-gray-400 italic text-right truncate max-w-[180px]' :
-          'text-gray-900 text-right truncate max-w-[180px]'
+          isMissing ? 'text-amber-600 dark:text-amber-400 italic' :
+          isFallback ? 'text-gray-400 dark:text-gray-500 italic text-right truncate max-w-[180px]' :
+          'text-gray-900 dark:text-gray-100 text-right truncate max-w-[180px]'
         }
         title={display}
       >

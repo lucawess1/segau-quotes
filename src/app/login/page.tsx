@@ -25,20 +25,20 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-6 bg-gray-50">
-      <div className="bg-white border border-gray-200 rounded-xl p-8 max-w-sm w-full shadow-sm">
+    <main className="min-h-screen flex items-center justify-center p-6 bg-gray-50 dark:bg-gray-950">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-8 max-w-sm w-full shadow-sm">
         <div className="flex items-center gap-2.5 mb-6">
-          <Zap className="w-6 h-6 text-blue-600" />
+          <Zap className="w-6 h-6 text-blue-600 dark:text-blue-400" />
           <div>
-            <p className="font-medium">SEGAU Quote Builder</p>
-            <p className="text-xs text-gray-500">Sign in to continue</p>
+            <p className="font-medium text-gray-900 dark:text-gray-100">SEGAU Quote Builder</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Sign in to continue</p>
           </div>
         </div>
 
         <button
           onClick={signInWithGoogle}
           disabled={loading}
-          className="w-full py-2.5 px-4 border border-gray-200 rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center gap-2.5"
+          className="w-full py-2.5 px-4 border border-gray-200 dark:border-gray-700 rounded-md text-sm font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2.5"
         >
           {/* Google G logo */}
           <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -51,12 +51,12 @@ export default function LoginPage() {
         </button>
 
         {error && (
-          <p className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+          <p className="mt-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded-md px-3 py-2">
             {error}
           </p>
         )}
 
-        <p className="mt-6 text-xs text-gray-400 text-center leading-relaxed">
+        <p className="mt-6 text-xs text-gray-400 dark:text-gray-500 text-center leading-relaxed">
           Access is restricted to authorised SEGAU specialists. Contact your admin if you need access.
         </p>
       </div>
