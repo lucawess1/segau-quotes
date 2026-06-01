@@ -500,6 +500,47 @@ export default function QuoteBuilder() {
               <Line label={`Extras (${selectedExtras.length})`} value={formatCurrency(extrasTotal)} />
             </div>
 
+            {matchedPackage && (
+              <div className="mt-4 pt-3 border-t border-gray-200">
+                <p className="text-xs font-medium text-gray-500 mb-2">Specifications</p>
+                <div className="space-y-2">
+                  {includesBattery && (
+                    <SpecGroup title="Battery">
+                      <SpecRow label="Brand" value={matchedPackage.brand} />
+                      <SpecRow label="Capacity" value={`${matchedPackage.battery_kwh ?? '—'} kWh`} />
+                      <SpecRow label="Model" value={matchedPackage.battery_model} />
+                      <SpecRow label="Inverter" value={matchedPackage.battery_inverter ?? inverterCode} />
+                      {showPhaseFilter && <SpecRow label="Phase" value={matchedPackage.inverter_phase} />}
+                      {showParalleledFilter && <SpecRow label="Config" value={matchedPackage.inverter_paralleled ? 'Paralleled ×2' : 'Single'} />}
+                    </SpecGroup>
+                  )}
+
+                  {includesSolar && (
+                    <SpecGroup title="Solar">
+                      <SpecRow label="Panels" value={matchedPackage.panel_count ? `${matchedPackage.panel_count} ×` : '—'} />
+                      <SpecRow label="Panel model" value={matchedPackage.panel_model} />
+                      <SpecRow label="System size" value={matchedPackage.system_size_kw ? `${matchedPackage.system_size_kw} kW` : '—'} />
+                      <SpecRow label="PV inverter" value={matchedPackage.pv_inverter} />
+                    </SpecGroup>
+                  )}
+
+                  {includesHwhp && (
+                    <SpecGroup title="Hot water heat pump">
+                      <SpecRow label="Tank" value={`${hwhpLitres}L`} />
+                      <SpecRow label="Model" value={hwhpModel} />
+                    </SpecGroup>
+                  )}
+
+                  {includesHvac && (
+                    <SpecGroup title="HVAC">
+                      <SpecRow label="Type" value={hvacType} />
+                      <SpecRow label="Capacity" value={`${hvacKw} kW`} />
+                    </SpecGroup>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className={`mt-3 px-3 py-2.5 rounded-md flex gap-2 items-start ${quotedItems > 0 ? 'bg-amber-50' : 'bg-blue-50'}`}>
               <Info className={`w-4 h-4 flex-shrink-0 mt-0.5 ${quotedItems > 0 ? 'text-amber-700' : 'text-blue-700'}`} />
               <p className={`text-xs leading-relaxed ${quotedItems > 0 ? 'text-amber-700' : 'text-blue-700'}`}>
@@ -559,6 +600,28 @@ function Line({ label, value, valueColor }: { label: string; value: string; valu
     <div className="flex justify-between py-0.5 text-gray-500">
       <span>{label}</span>
       <span className={valueColor ?? 'text-gray-900'}>{value}</span>
+    </div>
+  )
+}
+
+function SpecGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-1">{title}</p>
+      <div className="space-y-0.5">{children}</div>
+    </div>
+  )
+}
+
+function SpecRow({ label, value }: { label: string; value: string | number | null | undefined }) {
+  const display = value === null || value === undefined || value === '' ? '—' : String(value)
+  const isMissing = display === '—'
+  return (
+    <div className="flex justify-between text-xs">
+      <span className="text-gray-500">{label}</span>
+      <span className={isMissing ? 'text-amber-600 italic' : 'text-gray-900 text-right truncate ml-2 max-w-[180px]'} title={display}>
+        {display}
+      </span>
     </div>
   )
 }
