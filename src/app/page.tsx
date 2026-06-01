@@ -100,12 +100,6 @@ export default function QuoteBuilder() {
     return Array.from(set).sort((a, b) => a - b) as number[]
   }, [setPackages_, includesHwhp])
 
-  const availableHwhpModels = useMemo(() => {
-    if (!includesHwhp) return []
-    const set = new Set(setPackages_.map(p => (p.specs as any)?.hwhp_model).filter(Boolean))
-    return Array.from(set).sort() as string[]
-  }, [setPackages_, includesHwhp])
-
   const availableHvacTypes = useMemo(() => {
     if (!includesHvac) return []
     const set = new Set(setPackages_.map(p => (p.specs as any)?.hvac_type).filter(Boolean))
@@ -175,11 +169,17 @@ export default function QuoteBuilder() {
     }
   }, [availableHwhpLitres, hwhpLitres, includesHwhp])
 
+  // Auto-derive HWHP model from the selected tank size by looking up which model is
+  // associated with that tank size in the data. This removes the need for a separate
+  // model dropdown since model is uniquely determined by tank size.
   useEffect(() => {
-    if (includesHwhp && availableHwhpModels.length > 0 && !availableHwhpModels.includes(hwhpModel)) {
-      setHwhpModel(availableHwhpModels[0])
+    if (!includesHwhp) return
+    const pkg = setPackages_.find(p => (p.specs as any)?.hwhp_litres === hwhpLitres)
+    const derivedModel = (pkg?.specs as any)?.hwhp_model
+    if (derivedModel && derivedModel !== hwhpModel) {
+      setHwhpModel(derivedModel)
     }
-  }, [availableHwhpModels, hwhpModel, includesHwhp])
+  }, [setPackages_, hwhpLitres, hwhpModel, includesHwhp])
 
   useEffect(() => {
     if (includesHvac && availableHvacTypes.length > 0 && !availableHvacTypes.includes(hvacType)) {
@@ -361,12 +361,6 @@ export default function QuoteBuilder() {
                   <select value={hwhpLitres} onChange={e => setHwhpLitres(Number(e.target.value))}
                     className="h-9 px-3 border border-gray-200 rounded-md bg-white">
                     {availableHwhpLitres.map(l => <option key={l} value={l}>{l}L</option>)}
-                  </select>
-
-                  <label className="text-gray-500">HWHP model</label>
-                  <select value={hwhpModel} onChange={e => setHwhpModel(e.target.value)}
-                    className="h-9 px-3 border border-gray-200 rounded-md bg-white">
-                    {availableHwhpModels.map(m => <option key={m}>{m}</option>)}
                   </select>
                 </>
               )}
