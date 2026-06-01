@@ -2,9 +2,26 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { supabase, type Package, type PriceVariant, type Extra } from '@/lib/supabase'
-import { Zap, User, Plus, X, FileText, ArrowLeftRight, Save, Info } from 'lucide-react'
+import { Zap, User, Plus, X, Save, Info, Check, History } from 'lucide-react'
 
 type QuoteExtra = Extra & { instanceId: string }
+
+// Minimal Quote shape used by the recent quotes list (matches the columns we select)
+type SavedQuote = {
+  id: number
+  quote_number: string
+  nickname: string | null
+  customer_name: string | null
+  product_set: string | null
+  brand: string | null
+  battery_kwh: number | null
+  panel_count: number | null
+  territory: string | null
+  zone: number | null
+  finance_term: string | null
+  total_price: number | null
+  created_at: string | null
+}
 
 const HAS_BATTERY = ['Solar & Battery', 'Battery Only', 'Battery Only - Additional', 'HWHP & Battery', 'HWHP, Solar & Battery']
 const HAS_SOLAR = ['Solar Only', 'Solar & Battery', 'HWHP, Solar & Battery']
@@ -45,6 +62,15 @@ export default function QuoteBuilder() {
   const [selectedExtras, setSelectedExtras] = useState<QuoteExtra[]>([])
   const [showExtraPicker, setShowExtraPicker] = useState(false)
 
+  // Save dialog + recent quotes list
+  const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const [saveNickname, setSaveNickname] = useState('')
+  const [saveCustomerName, setSaveCustomerName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [savedConfirmation, setSavedConfirmation] = useState<string | null>(null)
+  const [recentQuotes, setRecentQuotes] = useState<SavedQuote[]>([])
+  const [loadingQuotes, setLoadingQuotes] = useState(true)
+
   const includesBattery = HAS_BATTERY.includes(productSet)
   const includesSolar = HAS_SOLAR.includes(productSet)
   const includesHwhp = HAS_HWHP.includes(productSet)
@@ -60,7 +86,20 @@ export default function QuoteBuilder() {
     supabase.from('price_variants').select('*').then(({ data }) => {
       if (data) setVariants(data)
     })
+    loadRecentQuotes()
   }, [])
+
+  const loadRecentQuotes = async () => {
+    setLoadingQuotes(true)
+    const { data, error } = await supabase
+      .from('quotes')
+      .select('id, quote_number, nickname, customer_name, product_set, brand, battery_kwh, panel_count, territory, zone, finance_term, total_price, created_at')
+      .order('created_at', { ascending: false })
+      .limit(20)
+    if (error) console.error('Failed to load recent quotes:', error)
+    if (data) setRecentQuotes(data as SavedQuote[])
+    setLoadingQuotes(false)
+  }
 
   const setPackages_ = useMemo(
     () => packages.filter(p => p.product_set === productSet),
@@ -254,6 +293,80 @@ export default function QuoteBuilder() {
 
   const removeExtra = (instanceId: string) => {
     setSelectedExtras(selectedExtras.filter(e => e.instanceId !== instanceId))
+  }
+
+  // Generate an auto quote number like Q-2026-0001 (date-based, no DB lookup needed for uniqueness
+  // because we add seconds + random suffix so collisions are vanishingly unlikely)
+  const generateQuoteNumber = () => {
+    const now = new Date()
+    const yyyy = now.getFullYear()
+    const mm = String(now.getMonth() + 1).padStart(2, '0')
+    const dd = String(now.getDate()).padStart(2, '0')
+    const hhmmss = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
+    return `Q-${yyyy}${mm}${dd}-${hhmmss}`
+  }
+
+  const saveQuote = async () => {
+    if (!matchedPackage) {
+      console.error('Cannot save: no matched package')
+      return
+    }
+    setSaving(true)
+    const quoteNumber = generateQuoteNumber()
+
+    const { data: quoteRow, error: quoteError } = await supabase
+      .from('quotes')
+      .insert({
+        quote_number: quoteNumber,
+        nickname: saveNickname.trim() || null,
+        customer_name: saveCustomerName.trim() || null,
+        package_id: matchedPackage.id,
+        product_set: productSet,
+        brand: includesBattery ? brand : null,
+        battery_kwh: includesBattery ? batteryKwh : null,
+        panel_count: includesSolar ? panels : null,
+        inverter_phase: showPhaseFilter ? inverterPhase : null,
+        inverter_paralleled: showParalleledFilter ? inverterParalleled : null,
+        hwhp_litres: includesHwhp ? hwhpLitres : null,
+        hvac_type: includesHvac ? hvacType : null,
+        hvac_kw: includesHvac ? hvacKw : null,
+        territory,
+        zone,
+        finance_term: financeTerm,
+        base_price: base,
+        stc_discount: stc,
+        extras_total: extrasTotal,
+        total_price: total,
+        status: 'draft',
+      })
+      .select()
+      .single()
+
+    if (quoteError) {
+      console.error('Failed to save quote:', quoteError)
+      setSaving(false)
+      return
+    }
+
+    // Save the extras as quote_extras rows (only if we have any and the quote insert succeeded)
+    if (selectedExtras.length > 0 && quoteRow) {
+      const extrasRows = selectedExtras.map(e => ({
+        quote_id: quoteRow.id,
+        extra_id: e.id,
+        quantity: e.charge_type === 'Per Panel' ? panels : 1,
+        line_total: e.charge_type === 'Per Panel' ? e.unit_price * panels : e.unit_price,
+      }))
+      const { error: extrasError } = await supabase.from('quote_extras').insert(extrasRows)
+      if (extrasError) console.error('Failed to save quote extras:', extrasError)
+    }
+
+    setSaving(false)
+    setShowSaveDialog(false)
+    setSaveNickname('')
+    setSaveCustomerName('')
+    setSavedConfirmation(quoteNumber)
+    setTimeout(() => setSavedConfirmation(null), 4000)
+    loadRecentQuotes()
   }
 
   const formatCurrency = (n: number) =>
@@ -556,15 +669,153 @@ export default function QuoteBuilder() {
             </div>
 
             <div className="mt-3.5 space-y-1.5">
-              <Button icon={<FileText className="w-3.5 h-3.5" />} primary>Generate proposal</Button>
-              <Button icon={<ArrowLeftRight className="w-3.5 h-3.5" />}>Compare brands</Button>
-              <Button icon={<Save className="w-3.5 h-3.5" />}>Save draft</Button>
+              <button
+                onClick={() => setShowSaveDialog(true)}
+                disabled={!matchedPackage}
+                className="w-full py-2 text-sm border rounded-md transition-colors flex items-center justify-center gap-1.5 bg-gray-900 text-white border-gray-900 hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Save className="w-3.5 h-3.5" /> Save quote
+              </button>
+              {savedConfirmation && (
+                <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
+                  <Check className="w-3.5 h-3.5 flex-shrink-0" />
+                  Saved as <code className="font-mono">{savedConfirmation}</code>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Recent quotes section - full width below everything */}
+      <section className="mt-8">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <History className="w-3.5 h-3.5 text-gray-400" />
+            <p className="text-xs font-medium text-gray-500">Recent quotes (last 20)</p>
+          </div>
+          <button onClick={loadRecentQuotes} className="text-xs text-gray-500 hover:text-gray-700">
+            Refresh
+          </button>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          {loadingQuotes ? (
+            <p className="text-xs text-gray-400 italic p-4 text-center">Loading…</p>
+          ) : recentQuotes.length === 0 ? (
+            <p className="text-xs text-gray-400 italic p-4 text-center">No saved quotes yet</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr className="text-xs text-gray-500">
+                  <th className="text-left font-medium px-3 py-2">Quote #</th>
+                  <th className="text-left font-medium px-3 py-2">Nickname</th>
+                  <th className="text-left font-medium px-3 py-2">Customer</th>
+                  <th className="text-left font-medium px-3 py-2">Configuration</th>
+                  <th className="text-left font-medium px-3 py-2">Site</th>
+                  <th className="text-left font-medium px-3 py-2">Finance</th>
+                  <th className="text-right font-medium px-3 py-2">Total</th>
+                  <th className="text-left font-medium px-3 py-2">Saved</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentQuotes.map(q => (
+                  <tr key={q.id} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
+                    <td className="px-3 py-2 font-mono text-xs text-gray-600">{q.quote_number}</td>
+                    <td className="px-3 py-2 text-xs">{q.nickname || <span className="text-gray-300">—</span>}</td>
+                    <td className="px-3 py-2 text-xs">{q.customer_name || <span className="text-gray-300">—</span>}</td>
+                    <td className="px-3 py-2 text-xs text-gray-600">
+                      {[
+                        q.product_set,
+                        q.brand && `${q.brand}`,
+                        q.battery_kwh ? `${q.battery_kwh}kWh` : null,
+                        q.panel_count ? `${q.panel_count}p` : null,
+                      ].filter(Boolean).join(' · ')}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-600">{q.territory ? `${q.territory} ZN${q.zone}` : '—'}</td>
+                    <td className="px-3 py-2 text-xs text-gray-600">{q.finance_term}</td>
+                    <td className="px-3 py-2 text-xs font-medium text-right">{q.total_price !== null ? formatCurrency(q.total_price) : '—'}</td>
+                    <td className="px-3 py-2 text-xs text-gray-500">{formatRelativeDate(q.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </section>
+
+      {/* Save dialog */}
+      {showSaveDialog && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => !saving && setShowSaveDialog(false)}>
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="font-medium">Save quote</p>
+              <button onClick={() => !saving && setShowSaveDialog(false)} className="p-1 hover:bg-gray-100 rounded">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Nickname (optional)</label>
+                <input
+                  type="text"
+                  value={saveNickname}
+                  onChange={e => setSaveNickname(e.target.value)}
+                  placeholder="e.g. Smith family — option A"
+                  className="w-full h-9 px-3 border border-gray-200 rounded-md text-sm focus:outline-none focus:border-gray-400"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Customer name (optional)</label>
+                <input
+                  type="text"
+                  value={saveCustomerName}
+                  onChange={e => setSaveCustomerName(e.target.value)}
+                  placeholder="e.g. John Smith"
+                  className="w-full h-9 px-3 border border-gray-200 rounded-md text-sm focus:outline-none focus:border-gray-400"
+                />
+              </div>
+              <div className="bg-gray-50 rounded-md px-3 py-2 text-xs text-gray-600 space-y-0.5">
+                <div className="flex justify-between"><span>Configuration:</span><span className="text-gray-900">{packageDescription}</span></div>
+                <div className="flex justify-between"><span>Total:</span><span className="text-gray-900 font-medium">{formatCurrency(total)}</span></div>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setShowSaveDialog(false)}
+                  disabled={saving}
+                  className="flex-1 py-2 text-sm border border-gray-200 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveQuote}
+                  disabled={saving}
+                  className="flex-1 py-2 text-sm bg-gray-900 text-white rounded-md hover:bg-gray-800 disabled:opacity-50"
+                >
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
+}
+
+// Format an ISO timestamp into "5m ago", "2h ago", "3d ago" or full date for older
+function formatRelativeDate(iso: string | null): string {
+  if (!iso) return '—'
+  const date = new Date(iso)
+  const diffMs = Date.now() - date.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  if (diffMin < 1) return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `${diffHr}h ago`
+  const diffDay = Math.floor(diffHr / 24)
+  if (diffDay < 7) return `${diffDay}d ago`
+  return date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
 }
 
 function SegmentedControl({ value, options, labels, labelPrefix, onChange }: {
@@ -642,17 +893,5 @@ function SpecRow({ label, value, fallback }: {
         {display}
       </span>
     </div>
-  )
-}
-
-function Button({ children, icon, primary }: { children: React.ReactNode; icon?: React.ReactNode; primary?: boolean }) {
-  return (
-    <button className={`w-full py-2 text-sm border rounded-md transition-colors flex items-center justify-center gap-1.5 ${
-      primary
-        ? 'bg-gray-900 text-white border-gray-900 hover:bg-gray-800'
-        : 'bg-white border-gray-200 hover:bg-gray-50'
-    }`}>
-      {icon} {children}
-    </button>
   )
 }
