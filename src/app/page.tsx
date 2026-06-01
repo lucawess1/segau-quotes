@@ -509,7 +509,14 @@ export default function QuoteBuilder() {
                       <SpecRow label="Brand" value={matchedPackage.brand} />
                       <SpecRow label="Capacity" value={`${matchedPackage.battery_kwh ?? '—'} kWh`} />
                       <SpecRow label="Model" value={matchedPackage.battery_model} />
-                      <SpecRow label="Inverter" value={matchedPackage.battery_inverter ?? inverterCode} />
+                      <SpecRow
+                        label="Inverter"
+                        value={(() => {
+                          const inv = matchedPackage.battery_inverter ?? inverterCode
+                          if (!inv) return inv
+                          return matchedPackage.inverter_paralleled ? `${inv} ×2` : inv
+                        })()}
+                      />
                       {showPhaseFilter && <SpecRow label="Phase" value={matchedPackage.inverter_phase} />}
                       {showParalleledFilter && <SpecRow label="Config" value={matchedPackage.inverter_paralleled ? 'Paralleled ×2' : 'Single'} />}
                     </SpecGroup>
@@ -520,7 +527,11 @@ export default function QuoteBuilder() {
                       <SpecRow label="Panels" value={matchedPackage.panel_count ? `${matchedPackage.panel_count} ×` : '—'} />
                       <SpecRow label="Panel model" value={matchedPackage.panel_model} />
                       <SpecRow label="System size" value={matchedPackage.system_size_kw ? `${matchedPackage.system_size_kw} kW` : '—'} />
-                      <SpecRow label="PV inverter" value={matchedPackage.pv_inverter} />
+                      <SpecRow
+                        label="PV inverter"
+                        value={matchedPackage.pv_inverter}
+                        fallback="Shared with battery inverter"
+                      />
                     </SpecGroup>
                   )}
 
@@ -613,13 +624,27 @@ function SpecGroup({ title, children }: { title: string; children: React.ReactNo
   )
 }
 
-function SpecRow({ label, value }: { label: string; value: string | number | null | undefined }) {
-  const display = value === null || value === undefined || value === '' ? '—' : String(value)
-  const isMissing = display === '—'
+function SpecRow({ label, value, fallback }: {
+  label: string
+  value: string | number | null | undefined
+  fallback?: string
+}) {
+  const isEmpty = value === null || value === undefined || value === ''
+  // If a fallback is provided, treat null as "not applicable" rather than "missing"
+  const display = isEmpty ? (fallback ?? '—') : String(value)
+  const isMissing = isEmpty && !fallback
+  const isFallback = isEmpty && !!fallback
   return (
-    <div className="flex justify-between text-xs">
-      <span className="text-gray-500">{label}</span>
-      <span className={isMissing ? 'text-amber-600 italic' : 'text-gray-900 text-right truncate ml-2 max-w-[180px]'} title={display}>
+    <div className="flex justify-between text-xs gap-2">
+      <span className="text-gray-500 flex-shrink-0">{label}</span>
+      <span
+        className={
+          isMissing ? 'text-amber-600 italic' :
+          isFallback ? 'text-gray-400 italic text-right truncate max-w-[180px]' :
+          'text-gray-900 text-right truncate max-w-[180px]'
+        }
+        title={display}
+      >
         {display}
       </span>
     </div>
