@@ -6,13 +6,11 @@ import { Zap, User, Plus, X, FileText, ArrowLeftRight, Save, Info } from 'lucide
 
 type QuoteExtra = Extra & { instanceId: string }
 
-// Product sets that include each component
 const HAS_BATTERY = ['Solar & Battery', 'Battery Only', 'Battery Only - Additional', 'HWHP & Battery', 'HWHP, Solar & Battery']
 const HAS_SOLAR = ['Solar Only', 'Solar & Battery', 'HWHP, Solar & Battery']
 const HAS_HWHP = ['HWHP Only', 'HWHP & Battery', 'HWHP, Solar & Battery']
 const HAS_HVAC = ['HVAC']
 
-// Product sets we expose in the UI (excludes "Additional Panels" - moved to extras - and any test rows)
 const VISIBLE_PRODUCT_SETS = [
   'Solar Only',
   'Solar & Battery',
@@ -29,10 +27,7 @@ export default function QuoteBuilder() {
   const [extras, setExtras] = useState<Extra[]>([])
   const [variants, setVariants] = useState<PriceVariant[]>([])
 
-  // Primary selector
   const [productSet, setProductSet] = useState<string>('Solar & Battery')
-
-  // Component-specific selections (only used when relevant)
   const [brand, setBrand] = useState<string>('ALPHA')
   const [batteryKwh, setBatteryKwh] = useState<number>(10)
   const [panels, setPanels] = useState<number>(15)
@@ -40,23 +35,21 @@ export default function QuoteBuilder() {
   const [hwhpModel, setHwhpModel] = useState<string>('EHPG VM')
   const [hvacType, setHvacType] = useState<string>('Ducted')
   const [hvacKw, setHvacKw] = useState<number>(13)
+  const [inverterPhase, setInverterPhase] = useState<string>('1PH')
+  const [inverterParalleled, setInverterParalleled] = useState<boolean>(false)
 
-  // Site & finance
   const [territory, setTerritory] = useState<'Metro' | 'Regional'>('Metro')
   const [zone, setZone] = useState(3)
   const [financeTerm, setFinanceTerm] = useState<'Cash' | '60m' | '84m'>('60m')
 
-  // Extras
   const [selectedExtras, setSelectedExtras] = useState<QuoteExtra[]>([])
   const [showExtraPicker, setShowExtraPicker] = useState(false)
 
-  // What's in this product set?
   const includesBattery = HAS_BATTERY.includes(productSet)
   const includesSolar = HAS_SOLAR.includes(productSet)
   const includesHwhp = HAS_HWHP.includes(productSet)
   const includesHvac = HAS_HVAC.includes(productSet)
 
-  // Load reference data
   useEffect(() => {
     supabase.from('packages').select('*').eq('active', true).then(({ data }) => {
       if (data) setPackages(data)
@@ -69,13 +62,11 @@ export default function QuoteBuilder() {
     })
   }, [])
 
-  // Packages filtered to current product set
   const setPackages_ = useMemo(
     () => packages.filter(p => p.product_set === productSet),
     [packages, productSet]
   )
 
-  // Derived dropdown options from actual data
   const availableBrands = useMemo(() => {
     const set = new Set(setPackages_.map(p => p.brand).filter(b => b && b !== 'NA'))
     return Array.from(set).sort()
@@ -132,7 +123,34 @@ export default function QuoteBuilder() {
     return Array.from(set).sort((a, b) => a - b) as number[]
   }, [setPackages_, hvacType, includesHvac])
 
-  // Auto-correct out-of-range selections when product set or upstream selection changes
+  // Inverter filtering - only shown when more than one option exists for current selection
+  const inverterCandidates = useMemo(() => {
+    if (!includesBattery) return []
+    return setPackages_.filter(p => {
+      if (p.brand !== brand) return false
+      if ((p.battery_kwh ?? 0) !== batteryKwh) return false
+      if (includesSolar && (p.panel_count ?? 0) !== panels) return false
+      return true
+    })
+  }, [setPackages_, brand, batteryKwh, panels, includesBattery, includesSolar])
+
+  const availablePhases = useMemo(() => {
+    const set = new Set(inverterCandidates.map(p => p.inverter_phase).filter(Boolean) as string[])
+    return Array.from(set).sort()
+  }, [inverterCandidates])
+
+  const availableParalleled = useMemo(() => {
+    const matching = availablePhases.length > 1
+      ? inverterCandidates.filter(p => p.inverter_phase === inverterPhase)
+      : inverterCandidates
+    const set = new Set(matching.map(p => p.inverter_paralleled).filter(v => v !== null && v !== undefined) as boolean[])
+    return Array.from(set).sort()
+  }, [inverterCandidates, availablePhases, inverterPhase])
+
+  const showPhaseFilter = availablePhases.length > 1
+  const showParalleledFilter = availableParalleled.length > 1
+
+  // Auto-correct out-of-range selections
   useEffect(() => {
     if (includesBattery && availableBrands.length > 0 && !availableBrands.includes(brand)) {
       setBrand(availableBrands[0])
@@ -175,7 +193,19 @@ export default function QuoteBuilder() {
     }
   }, [availableHvacKws, hvacKw, includesHvac])
 
-  // Match a package based on all the currently-relevant selections
+  useEffect(() => {
+    if (showPhaseFilter && !availablePhases.includes(inverterPhase)) {
+      setInverterPhase(availablePhases[0])
+    }
+  }, [availablePhases, inverterPhase, showPhaseFilter])
+
+  useEffect(() => {
+    if (showParalleledFilter && !availableParalleled.includes(inverterParalleled)) {
+      setInverterParalleled(availableParalleled[0])
+    }
+  }, [availableParalleled, inverterParalleled, showParalleledFilter])
+
+  // Match a package
   const matchedPackage = setPackages_.find(p => {
     const specs = (p.specs as any) || {}
     if (includesBattery) {
@@ -193,10 +223,11 @@ export default function QuoteBuilder() {
       if (specs.hvac_type !== hvacType) return false
       if (specs.hvac_kw !== hvacKw) return false
     }
+    if (showPhaseFilter && p.inverter_phase !== inverterPhase) return false
+    if (showParalleledFilter && p.inverter_paralleled !== inverterParalleled) return false
     return true
   })
 
-  // Price lookup
   const variant = variants.find(v =>
     v.package_id === matchedPackage?.id &&
     v.territory === territory &&
@@ -204,7 +235,6 @@ export default function QuoteBuilder() {
     v.finance_term === financeTerm
   )
 
-  // Calculate extras total
   const extrasTotal = selectedExtras.reduce((sum, e) => {
     return sum + (e.charge_type === 'Per Panel' ? e.unit_price * panels : e.unit_price)
   }, 0)
@@ -231,17 +261,22 @@ export default function QuoteBuilder() {
 
   const systemSize = matchedPackage?.system_size_kw?.toFixed(2) ?? (panels * 0.44).toFixed(2)
 
-  // Build a friendly package description
+  const inverterCode = (() => {
+    if (!matchedPackage || !showPhaseFilter) return null
+    const match = matchedPackage.package_code.match(/X1-[A-Z0-9]+-[ST]/)
+    return match ? match[0] : null
+  })()
+
   const packageDescription = [
     includesBattery ? `${brand}-${batteryKwh}kWh battery` : null,
     includesSolar && panels > 0 ? `${systemSize}kW PV` : null,
     includesHwhp ? `${hwhpLitres}L ${hwhpModel}` : null,
     includesHvac ? `${hvacKw}kW ${hvacType}` : null,
+    inverterCode ? `${inverterCode}${inverterParalleled ? ' ×2 paralleled' : ''}` : null,
   ].filter(Boolean).join(' + ') || 'Nothing selected'
 
   return (
     <main className="max-w-5xl mx-auto p-6">
-      {/* Header */}
       <header className="flex items-center justify-between pb-3 mb-5 border-b border-gray-200">
         <div className="flex items-center gap-2.5">
           <Zap className="w-5 h-5 text-blue-600" />
@@ -257,7 +292,6 @@ export default function QuoteBuilder() {
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr] gap-4">
-        {/* Left column: builder */}
         <div>
           <p className="text-xs font-medium text-gray-500 mb-2">1. System</p>
           <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
@@ -295,6 +329,29 @@ export default function QuoteBuilder() {
                       {panels} ({systemSize} kW)
                     </span>
                   </div>
+                </>
+              )}
+
+              {showPhaseFilter && (
+                <>
+                  <label className="text-gray-500">Phase</label>
+                  <SegmentedControl
+                    value={inverterPhase}
+                    options={availablePhases}
+                    onChange={v => setInverterPhase(v)}
+                  />
+                </>
+              )}
+
+              {showParalleledFilter && (
+                <>
+                  <label className="text-gray-500">Inverter</label>
+                  <SegmentedControl
+                    value={inverterParalleled ? 'paralleled' : 'single'}
+                    options={availableParalleled.map(v => v ? 'paralleled' : 'single')}
+                    labels={availableParalleled.map(v => v ? 'Paralleled ×2' : 'Single')}
+                    onChange={v => setInverterParalleled(v === 'paralleled')}
+                  />
                 </>
               )}
 
@@ -421,7 +478,6 @@ export default function QuoteBuilder() {
           </div>
         </div>
 
-        {/* Right column: summary */}
         <div>
           <p className="text-xs font-medium text-gray-500 mb-2">Quote summary</p>
           <div className="bg-white border border-gray-200 rounded-xl p-4">
