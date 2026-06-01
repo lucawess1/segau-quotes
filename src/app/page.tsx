@@ -431,20 +431,20 @@ export default function QuoteBuilder() {
   ].filter(Boolean).join(' + ') || 'Nothing selected'
 
   return (
-    <main className="max-w-5xl mx-auto p-6">
-      <header className="flex items-center justify-between pb-3 mb-5 border-b border-gray-200">
-        <div className="flex items-center gap-2.5">
-          <Zap className="w-5 h-5 text-blue-600" />
-          <div>
-            <p className="font-medium text-[15px]">SEGAU Quote Builder</p>
-            <p className="text-xs text-gray-500">Pricing v2026.05.05 · last updated 5 May</p>
+    <main className="max-w-5xl mx-auto p-3 md:p-6 pb-24 md:pb-6">
+      <header className="flex items-center justify-between pb-3 mb-4 md:mb-5 border-b border-gray-200 gap-2">
+        <div className="flex items-center gap-2 md:gap-2.5 min-w-0">
+          <Zap className="w-5 h-5 text-blue-600 flex-shrink-0" />
+          <div className="min-w-0">
+            <p className="font-medium text-sm md:text-[15px] truncate">SEGAU Quote Builder</p>
+            <p className="hidden md:block text-xs text-gray-500">Pricing v2026.05.05 · last updated 5 May</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs text-gray-500">
-            <User className="w-3.5 h-3.5" />
-            <span>
-              {profile?.full_name || profile?.email || 'Loading…'}
+        <div className="flex items-center gap-1 md:gap-3 flex-shrink-0">
+          <div className="flex items-center gap-1.5 text-xs text-gray-500 max-w-[120px] md:max-w-none">
+            <User className="w-3.5 h-3.5 flex-shrink-0" />
+            <span className="truncate">
+              {profile?.full_name?.split(' ')[0] || profile?.email?.split('@')[0] || '…'}
               {profile?.role === 'admin' && (
                 <span className="ml-1.5 text-[10px] uppercase tracking-wide bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
                   Admin
@@ -454,11 +454,12 @@ export default function QuoteBuilder() {
           </div>
           <button
             onClick={signOut}
-            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 px-2 py-1 hover:bg-gray-50 rounded"
+            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 p-1.5 md:px-2 md:py-1 hover:bg-gray-50 rounded"
             title="Sign out"
+            aria-label="Sign out"
           >
             <LogOut className="w-3.5 h-3.5" />
-            Sign out
+            <span className="hidden md:inline">Sign out</span>
           </button>
         </div>
       </header>
@@ -468,10 +469,10 @@ export default function QuoteBuilder() {
           <p className="text-xs font-medium text-gray-500 mb-2">1. System</p>
           <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
 
-            <div className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-2.5 items-center text-sm">
+            <div className="flex flex-col gap-3 text-sm md:grid md:grid-cols-[110px_1fr] md:gap-x-3 md:gap-y-2.5 md:items-center">
               <label className="text-gray-500">Product type</label>
               <select value={productSet} onChange={e => setProductSet(e.target.value)}
-                className="h-9 px-3 border border-gray-200 rounded-md bg-white">
+                className="h-11 md:h-9 px-3 border border-gray-200 rounded-md bg-white text-base md:text-sm">
                 {VISIBLE_PRODUCT_SETS.map(s => <option key={s}>{s}</option>)}
               </select>
 
@@ -479,13 +480,13 @@ export default function QuoteBuilder() {
                 <>
                   <label className="text-gray-500">Battery brand</label>
                   <select value={brand} onChange={e => setBrand(e.target.value)}
-                    className="h-9 px-3 border border-gray-200 rounded-md bg-white">
+                    className="h-11 md:h-9 px-3 border border-gray-200 rounded-md bg-white text-base md:text-sm">
                     {availableBrands.map(b => <option key={b}>{b}</option>)}
                   </select>
 
                   <label className="text-gray-500">Battery size</label>
                   <select value={batteryKwh} onChange={e => setBatteryKwh(Number(e.target.value))}
-                    className="h-9 px-3 border border-gray-200 rounded-md bg-white">
+                    className="h-11 md:h-9 px-3 border border-gray-200 rounded-md bg-white text-base md:text-sm">
                     {availableBatterySizes.map(s => <option key={s} value={s}>{s} kWh</option>)}
                   </select>
                 </>
@@ -531,7 +532,7 @@ export default function QuoteBuilder() {
                 <>
                   <label className="text-gray-500">HWHP tank</label>
                   <select value={hwhpLitres} onChange={e => setHwhpLitres(Number(e.target.value))}
-                    className="h-9 px-3 border border-gray-200 rounded-md bg-white">
+                    className="h-11 md:h-9 px-3 border border-gray-200 rounded-md bg-white text-base md:text-sm">
                     {availableHwhpLitres.map(l => <option key={l} value={l}>{l}L</option>)}
                   </select>
                 </>
@@ -541,30 +542,30 @@ export default function QuoteBuilder() {
                 <>
                   <label className="text-gray-500">HVAC type</label>
                   <select value={hvacType} onChange={e => setHvacType(e.target.value)}
-                    className="h-9 px-3 border border-gray-200 rounded-md bg-white">
+                    className="h-11 md:h-9 px-3 border border-gray-200 rounded-md bg-white text-base md:text-sm">
                     {availableHvacTypes.map(t => <option key={t}>{t}</option>)}
                   </select>
 
                   <label className="text-gray-500">HVAC capacity</label>
                   <select value={hvacKw} onChange={e => setHvacKw(Number(e.target.value))}
-                    className="h-9 px-3 border border-gray-200 rounded-md bg-white">
+                    className="h-11 md:h-9 px-3 border border-gray-200 rounded-md bg-white text-base md:text-sm">
                     {availableHvacKws.map(k => <option key={k} value={k}>{k} kW</option>)}
                   </select>
                 </>
               )}
 
               <label className="text-gray-500">Package</label>
-              <div className="flex items-center gap-2 min-w-0">
-                <code className="text-xs bg-gray-100 px-2 py-1 rounded">
+              <div className="flex flex-col md:flex-row md:items-center gap-1.5 md:gap-2 min-w-0">
+                <code className="text-xs bg-gray-100 px-2 py-1 rounded break-all md:break-normal">
                   {matchedPackage?.package_code ?? 'No match'}
                 </code>
-                <span className="text-xs text-gray-500 truncate">{packageDescription}</span>
+                <span className="text-xs text-gray-500 md:truncate">{packageDescription}</span>
               </div>
             </div>
 
             <div className="pt-3 border-t border-gray-200">
               <p className="text-xs font-medium text-gray-500 mb-2">2. Site & finance</p>
-              <div className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-2.5 items-center text-sm">
+              <div className="flex flex-col gap-3 text-sm md:grid md:grid-cols-[110px_1fr] md:gap-x-3 md:gap-y-2.5 md:items-center">
                 <label className="text-gray-500">Territory</label>
                 <SegmentedControl
                   value={territory}
@@ -731,7 +732,7 @@ export default function QuoteBuilder() {
               <button
                 onClick={() => setShowSaveDialog(true)}
                 disabled={!matchedPackage}
-                className="w-full py-2 text-sm border rounded-md transition-colors flex items-center justify-center gap-1.5 bg-gray-900 text-white border-gray-900 hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="hidden md:flex w-full py-2 text-sm border rounded-md transition-colors items-center justify-center gap-1.5 bg-gray-900 text-white border-gray-900 hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Save className="w-3.5 h-3.5" /> Save quote
               </button>
@@ -765,41 +766,80 @@ export default function QuoteBuilder() {
           ) : recentQuotes.length === 0 ? (
             <p className="text-xs text-gray-400 italic p-4 text-center">No saved quotes yet</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr className="text-xs text-gray-500">
-                  <th className="text-left font-medium px-3 py-2">Quote #</th>
-                  <th className="text-left font-medium px-3 py-2">Nickname</th>
-                  <th className="text-left font-medium px-3 py-2">Customer</th>
-                  <th className="text-left font-medium px-3 py-2">Configuration</th>
-                  <th className="text-left font-medium px-3 py-2">Site</th>
-                  <th className="text-left font-medium px-3 py-2">Finance</th>
-                  <th className="text-right font-medium px-3 py-2">Total</th>
-                  <th className="text-left font-medium px-3 py-2">Saved</th>
-                </tr>
-              </thead>
-              <tbody>
+            <>
+              {/* Desktop: table */}
+              <table className="hidden md:table w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr className="text-xs text-gray-500">
+                    <th className="text-left font-medium px-3 py-2">Quote #</th>
+                    <th className="text-left font-medium px-3 py-2">Nickname</th>
+                    <th className="text-left font-medium px-3 py-2">Customer</th>
+                    <th className="text-left font-medium px-3 py-2">Configuration</th>
+                    <th className="text-left font-medium px-3 py-2">Site</th>
+                    <th className="text-left font-medium px-3 py-2">Finance</th>
+                    <th className="text-right font-medium px-3 py-2">Total</th>
+                    <th className="text-left font-medium px-3 py-2">Saved</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentQuotes.map(q => (
+                    <tr key={q.id} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
+                      <td className="px-3 py-2 font-mono text-xs text-gray-600">{q.quote_number}</td>
+                      <td className="px-3 py-2 text-xs">{q.nickname || <span className="text-gray-300">—</span>}</td>
+                      <td className="px-3 py-2 text-xs">{q.customer_name || <span className="text-gray-300">—</span>}</td>
+                      <td className="px-3 py-2 text-xs text-gray-600">
+                        {[
+                          q.product_set,
+                          q.brand && `${q.brand}`,
+                          q.battery_kwh ? `${q.battery_kwh}kWh` : null,
+                          q.panel_count ? `${q.panel_count}p` : null,
+                        ].filter(Boolean).join(' · ')}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-gray-600">{q.territory ? `${q.territory} ZN${q.zone}` : '—'}</td>
+                      <td className="px-3 py-2 text-xs text-gray-600">{q.finance_term}</td>
+                      <td className="px-3 py-2 text-xs font-medium text-right">{q.total_price !== null ? formatCurrency(q.total_price) : '—'}</td>
+                      <td className="px-3 py-2 text-xs text-gray-500">{formatRelativeDate(q.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Mobile: cards */}
+              <div className="md:hidden divide-y divide-gray-100">
                 {recentQuotes.map(q => (
-                  <tr key={q.id} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
-                    <td className="px-3 py-2 font-mono text-xs text-gray-600">{q.quote_number}</td>
-                    <td className="px-3 py-2 text-xs">{q.nickname || <span className="text-gray-300">—</span>}</td>
-                    <td className="px-3 py-2 text-xs">{q.customer_name || <span className="text-gray-300">—</span>}</td>
-                    <td className="px-3 py-2 text-xs text-gray-600">
+                  <div key={q.id} className="p-3 hover:bg-gray-50">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">
+                          {q.nickname || q.customer_name || q.quote_number}
+                        </p>
+                        {(q.nickname && q.customer_name) && (
+                          <p className="text-xs text-gray-500 truncate">{q.customer_name}</p>
+                        )}
+                      </div>
+                      <p className="text-sm font-medium flex-shrink-0">
+                        {q.total_price !== null ? formatCurrency(q.total_price) : '—'}
+                      </p>
+                    </div>
+                    <p className="text-xs text-gray-600 truncate">
                       {[
                         q.product_set,
-                        q.brand && `${q.brand}`,
+                        q.brand,
                         q.battery_kwh ? `${q.battery_kwh}kWh` : null,
                         q.panel_count ? `${q.panel_count}p` : null,
                       ].filter(Boolean).join(' · ')}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-gray-600">{q.territory ? `${q.territory} ZN${q.zone}` : '—'}</td>
-                    <td className="px-3 py-2 text-xs text-gray-600">{q.finance_term}</td>
-                    <td className="px-3 py-2 text-xs font-medium text-right">{q.total_price !== null ? formatCurrency(q.total_price) : '—'}</td>
-                    <td className="px-3 py-2 text-xs text-gray-500">{formatRelativeDate(q.created_at)}</td>
-                  </tr>
+                    </p>
+                    <div className="flex items-center justify-between mt-1.5 text-[11px] text-gray-400">
+                      <span className="font-mono">{q.quote_number}</span>
+                      <span>
+                        {q.territory && `${q.territory} ZN${q.zone} · `}
+                        {q.finance_term} · {formatRelativeDate(q.created_at)}
+                      </span>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </>
           )}
         </div>
       </section>
@@ -822,7 +862,7 @@ export default function QuoteBuilder() {
                   value={saveNickname}
                   onChange={e => setSaveNickname(e.target.value)}
                   placeholder="e.g. Smith family — option A"
-                  className="w-full h-9 px-3 border border-gray-200 rounded-md text-sm focus:outline-none focus:border-gray-400"
+                  className="w-full h-11 md:h-9 px-3 border border-gray-200 rounded-md text-base md:text-sm focus:outline-none focus:border-gray-400"
                   autoFocus
                 />
               </div>
@@ -833,7 +873,7 @@ export default function QuoteBuilder() {
                   value={saveCustomerName}
                   onChange={e => setSaveCustomerName(e.target.value)}
                   placeholder="e.g. John Smith"
-                  className="w-full h-9 px-3 border border-gray-200 rounded-md text-sm focus:outline-none focus:border-gray-400"
+                  className="w-full h-11 md:h-9 px-3 border border-gray-200 rounded-md text-base md:text-sm focus:outline-none focus:border-gray-400"
                 />
               </div>
               <div className="bg-gray-50 rounded-md px-3 py-2 text-xs text-gray-600 space-y-0.5">
@@ -844,14 +884,14 @@ export default function QuoteBuilder() {
                 <button
                   onClick={() => setShowSaveDialog(false)}
                   disabled={saving}
-                  className="flex-1 py-2 text-sm border border-gray-200 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                  className="flex-1 py-2.5 md:py-2 text-sm border border-gray-200 rounded-md hover:bg-gray-50 disabled:opacity-50 min-h-[44px] md:min-h-0"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={saveQuote}
                   disabled={saving}
-                  className="flex-1 py-2 text-sm bg-gray-900 text-white rounded-md hover:bg-gray-800 disabled:opacity-50"
+                  className="flex-1 py-2.5 md:py-2 text-sm bg-gray-900 text-white rounded-md hover:bg-gray-800 disabled:opacity-50 min-h-[44px] md:min-h-0"
                 >
                   {saving ? 'Saving…' : 'Save'}
                 </button>
@@ -860,6 +900,24 @@ export default function QuoteBuilder() {
           </div>
         </div>
       )}
+
+      {/* Sticky bottom bar - mobile only */}
+      <div className="fixed bottom-0 left-0 right-0 md:hidden bg-white border-t border-gray-200 px-3 py-2.5 flex items-center gap-3 shadow-lg z-40">
+        <div className="flex-1 min-w-0">
+          <p className="text-[11px] text-gray-500 leading-tight">
+            {financeTerm === 'Cash' ? 'Total (inc GST)' : `BNPL ${financeTerm} · $${Math.round(fortnightly)}/fn`}
+          </p>
+          <p className="text-lg font-medium leading-tight">{formatCurrency(total)}</p>
+        </div>
+        <button
+          onClick={() => setShowSaveDialog(true)}
+          disabled={!matchedPackage}
+          className="px-4 py-2.5 bg-gray-900 text-white rounded-md text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 min-h-[44px]"
+        >
+          <Save className="w-4 h-4" />
+          Save
+        </button>
+      </div>
     </main>
   )
 }
@@ -887,7 +945,7 @@ function SegmentedControl({ value, options, labels, labelPrefix, onChange }: {
     <div className="flex gap-1.5">
       {options.map((opt, i) => (
         <button key={opt} onClick={() => onChange(opt)}
-          className={`flex-1 px-2.5 py-1.5 text-sm border rounded-md transition-colors ${
+          className={`flex-1 px-2.5 py-2.5 md:py-1.5 text-sm border rounded-md transition-colors min-h-[44px] md:min-h-0 ${
             value === opt
               ? 'bg-gray-100 border-gray-300 font-medium'
               : 'bg-transparent border-gray-200 text-gray-500 hover:bg-gray-50'
