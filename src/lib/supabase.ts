@@ -14,6 +14,8 @@ export type Package = {
   panel_count: number | null
   system_size_kw: number | null
   specs: Record<string, any> | null
+  inverter_phase: string | null
+  inverter_paralleled: boolean | null
 }
 
 export type PriceVariant = {
