@@ -13,6 +13,10 @@ export type Package = {
   battery_kwh: number | null
   panel_count: number | null
   system_size_kw: number | null
+  battery_inverter: string | null
+  battery_model: string | null
+  pv_inverter: string | null
+  panel_model: string | null
   specs: Record<string, any> | null
   inverter_phase: string | null
   inverter_paralleled: boolean | null
