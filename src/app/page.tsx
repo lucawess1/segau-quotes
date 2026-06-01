@@ -1,10 +1,21 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { supabase, type Package, type PriceVariant, type Extra } from '@/lib/supabase'
-import { Zap, User, Plus, X, Save, Info, Check, History } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import type { Package, PriceVariant, Extra } from '@/lib/supabase'
+import { Zap, User, Plus, X, Save, Info, Check, History, LogOut } from 'lucide-react'
+
+// Single Supabase client instance for this module
+const supabase = createClient()
 
 type QuoteExtra = Extra & { instanceId: string }
+
+type Profile = {
+  id: string
+  email: string
+  role: 'specialist' | 'admin'
+  full_name: string | null
+}
 
 // Minimal Quote shape used by the recent quotes list (matches the columns we select)
 type SavedQuote = {
@@ -71,6 +82,9 @@ export default function QuoteBuilder() {
   const [recentQuotes, setRecentQuotes] = useState<SavedQuote[]>([])
   const [loadingQuotes, setLoadingQuotes] = useState(true)
 
+  // Logged-in user's profile (loaded once on mount)
+  const [profile, setProfile] = useState<Profile | null>(null)
+
   const includesBattery = HAS_BATTERY.includes(productSet)
   const includesSolar = HAS_SOLAR.includes(productSet)
   const includesHwhp = HAS_HWHP.includes(productSet)
@@ -86,11 +100,34 @@ export default function QuoteBuilder() {
     supabase.from('price_variants').select('*').then(({ data }) => {
       if (data) setVariants(data)
     })
+    loadProfile()
     loadRecentQuotes()
   }, [])
 
+  const loadProfile = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, role, full_name')
+      .eq('id', user.id)
+      .single()
+    if (error) {
+      console.error('Failed to load profile:', error)
+      return
+    }
+    if (data) setProfile(data as Profile)
+  }
+
+  const signOut = async () => {
+    await supabase.auth.signOut()
+    window.location.href = '/login'
+  }
+
   const loadRecentQuotes = async () => {
     setLoadingQuotes(true)
+    // RLS handles the filtering: specialists get only their own quotes, admins get all.
+    // We just fetch — the database returns what the user is allowed to see.
     const { data, error } = await supabase
       .from('quotes')
       .select('id, quote_number, nickname, customer_name, product_set, brand, battery_kwh, panel_count, territory, zone, finance_term, total_price, created_at')
@@ -311,6 +348,10 @@ export default function QuoteBuilder() {
       console.error('Cannot save: no matched package')
       return
     }
+    if (!profile) {
+      console.error('Cannot save: no profile loaded')
+      return
+    }
     setSaving(true)
     const quoteNumber = generateQuoteNumber()
 
@@ -318,6 +359,7 @@ export default function QuoteBuilder() {
       .from('quotes')
       .insert({
         quote_number: quoteNumber,
+        user_id: profile.id,
         nickname: saveNickname.trim() || null,
         customer_name: saveCustomerName.trim() || null,
         package_id: matchedPackage.id,
@@ -398,9 +440,26 @@ export default function QuoteBuilder() {
             <p className="text-xs text-gray-500">Pricing v2026.05.05 · last updated 5 May</p>
           </div>
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-gray-500">
-          <User className="w-3.5 h-3.5" />
-          <span>Specialist: T. Nguyen</span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <User className="w-3.5 h-3.5" />
+            <span>
+              {profile?.full_name || profile?.email || 'Loading…'}
+              {profile?.role === 'admin' && (
+                <span className="ml-1.5 text-[10px] uppercase tracking-wide bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                  Admin
+                </span>
+              )}
+            </span>
+          </div>
+          <button
+            onClick={signOut}
+            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 px-2 py-1 hover:bg-gray-50 rounded"
+            title="Sign out"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            Sign out
+          </button>
         </div>
       </header>
 
@@ -692,7 +751,9 @@ export default function QuoteBuilder() {
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <History className="w-3.5 h-3.5 text-gray-400" />
-            <p className="text-xs font-medium text-gray-500">Recent quotes (last 20)</p>
+            <p className="text-xs font-medium text-gray-500">
+              {profile?.role === 'admin' ? 'Recent quotes — all users (last 20)' : 'Your recent quotes (last 20)'}
+            </p>
           </div>
           <button onClick={loadRecentQuotes} className="text-xs text-gray-500 hover:text-gray-700">
             Refresh
