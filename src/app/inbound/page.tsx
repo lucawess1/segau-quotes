@@ -18,6 +18,12 @@ type Profile = {
   teams: string[]
 }
 
+type Discount = {
+  package_id: number
+  discount_amount: number
+  notes: string | null
+}
+
 // Minimal Quote shape used by the recent quotes list (matches the columns we select)
 type SavedQuote = {
   id: number
@@ -92,6 +98,9 @@ export default function QuoteBuilder() {
   // Logged-in user's profile (loaded once on mount)
   const [profile, setProfile] = useState<Profile | null>(null)
 
+  // Inbound discounts (loaded once on mount; map of package_id -> discount_amount)
+  const [discounts, setDiscounts] = useState<Map<number, number>>(new Map())
+
   const includesBattery = HAS_BATTERY.includes(productSet)
   const includesSolar = HAS_SOLAR.includes(productSet)
   const includesHwhp = HAS_HWHP.includes(productSet)
@@ -107,16 +116,32 @@ export default function QuoteBuilder() {
     supabase.from('price_variants').select('*').then(({ data }) => {
       if (data) setVariants(data)
     })
+    supabase.from('discounts').select('*').then(({ data }) => {
+      if (data) {
+        const map = new Map<number, number>()
+        for (const d of data as Discount[]) {
+          map.set(d.package_id, d.discount_amount)
+        }
+        setDiscounts(map)
+      }
+    })
     loadProfile()
     loadRecentQuotes()
   }, [])
+
+  // Access guard: if profile loads and user isn't on inbound team, kick them back to /
+  useEffect(() => {
+    if (profile && !profile.teams?.includes('inbound') && profile.role !== 'admin') {
+      window.location.href = '/'
+    }
+  }, [profile])
 
   const loadProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, role, full_name, teams')
+      .select('id, email, role, full_name')
       .eq('id', user.id)
       .single()
     if (error) {
@@ -311,6 +336,7 @@ export default function QuoteBuilder() {
     return true
   })
 
+  // Look up the standard variant for the selected finance term (used as fallback / for proportional fortnightly scaling)
   const variant = variants.find(v =>
     v.package_id === matchedPackage?.id &&
     v.territory === territory &&
@@ -318,15 +344,41 @@ export default function QuoteBuilder() {
     v.finance_term === financeTerm
   )
 
+  // Also look up the CASH variant — this is the source of truth for inbound pricing math.
+  // The discount applies to cash; 60m and 84m are then derived from the discounted cash price
+  // using the business formula (cash_after_stc / 0.80 for 60m, / 0.70 for 84m).
+  const cashVariant = variants.find(v =>
+    v.package_id === matchedPackage?.id &&
+    v.territory === territory &&
+    v.zone === zone &&
+    v.finance_term === 'Cash'
+  )
+
   const extrasTotal = selectedExtras.reduce((sum, e) => {
     return sum + (e.charge_type === 'Per Panel' ? e.unit_price * panels : e.unit_price)
   }, 0)
 
-  const base = variant?.price_before_stc ?? 0
-  const stc = variant?.stc_discount ?? 0
-  const afterStc = variant?.price_after_stc ?? 0
+  // Inbound discount math:
+  // 1. Subtract discount from cash_after_stc (cash price the customer actually pays)
+  // 2. For Cash term: base = discounted_cash_after_stc + stc
+  // 3. For 60m: discounted_cash_after_stc / 0.80 = 60m_after_stc, then + stc = 60m_before
+  // 4. For 84m: discounted_cash_after_stc / 0.70 = 84m_after_stc, then + stc = 84m_before
+  const inboundDiscount = matchedPackage ? (discounts.get(matchedPackage.id) ?? 0) : 0
+  const stc = cashVariant?.stc_discount ?? variant?.stc_discount ?? 0
+  const cashAfterStc = cashVariant?.price_after_stc ?? 0
+  const discountedCashAfterStc = Math.max(0, cashAfterStc - inboundDiscount)
+
+  // Derive the after-STC price for the currently selected finance term
+  const financeMultiplier = financeTerm === 'Cash' ? 1 : financeTerm === '60m' ? 0.80 : 0.70
+  const afterStc = discountedCashAfterStc / financeMultiplier
+  const base = afterStc + stc
   const total = afterStc + extrasTotal
-  const fortnightly = variant?.fortnightly_repay ?? 0
+
+  // Fortnightly: scale the standard fortnightly proportionally based on how much the after-STC price moved
+  // (e.g. if discounted after-STC is 90% of standard after-STC, fortnightly is 90% of standard fortnightly)
+  const rawAfterStc = variant?.price_after_stc ?? 0
+  const rawFortnightly = variant?.fortnightly_repay ?? 0
+  const fortnightly = rawAfterStc > 0 ? rawFortnightly * (afterStc / rawAfterStc) : 0
 
   const quotedItems = selectedExtras.filter(e => e.charge_type === 'QUOTED').length
 
@@ -423,6 +475,7 @@ export default function QuoteBuilder() {
         extras_total: extrasTotal,
         total_price: total,
         status: 'draft',
+        is_inbound_pricing: true,
       })
       .select()
       .single()
@@ -476,25 +529,25 @@ export default function QuoteBuilder() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
     <main className="max-w-5xl mx-auto p-3 md:p-6 pb-24 md:pb-6">
+      {/* Inbound mode banner */}
+      <div className="mb-3 px-3 py-2 rounded-md bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 flex items-center gap-2">
+        <Info className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400 flex-shrink-0" />
+        <p className="text-xs text-amber-800 dark:text-amber-300">
+          <span className="font-medium">Inbound pricing mode</span> — discounted prices applied to eligible packages.
+          <a href="/" className="ml-1.5 underline hover:no-underline">Switch to standard</a>
+        </p>
+      </div>
+
       <header className="flex items-center justify-between pb-3 mb-4 md:mb-5 border-b border-gray-200 dark:border-gray-700 gap-2">
         <div className="flex items-center gap-2 md:gap-2.5 min-w-0">
-          <Zap className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+          <Zap className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
           <div className="min-w-0">
-            <p className="font-medium text-sm md:text-[15px] truncate">SEGAU Quote Builder</p>
-            <p className="hidden md:block text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">Pricing v2026.05.05 · last updated 5 May</p>
+            <p className="font-medium text-sm md:text-[15px] truncate">SEGAU Quote Builder — Inbound</p>
+            <p className="hidden md:block text-xs text-gray-500 dark:text-gray-400">Pricing v2026.05.05 · last updated 5 May</p>
           </div>
         </div>
         <div className="flex items-center gap-1 md:gap-3 flex-shrink-0">
-          {profile && (profile.teams?.includes('inbound') || profile.role === 'admin') && (
-            <a
-              href="/inbound"
-              className="hidden md:inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 px-2 py-1 rounded hover:bg-amber-50 dark:hover:bg-amber-950/50"
-              title="Switch to inbound pricing calculator"
-            >
-              Inbound pricing →
-            </a>
-          )}
-          <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 max-w-[120px] md:max-w-none">
+          <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500 max-w-[120px] md:max-w-none">
             <User className="w-3.5 h-3.5 flex-shrink-0" />
             <span className="truncate">
               {profile?.full_name?.split(' ')[0] || profile?.email?.split('@')[0] || '…'}
@@ -507,7 +560,7 @@ export default function QuoteBuilder() {
           </div>
           <button
             onClick={signOut}
-            className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1.5 md:px-2 md:py-1 hover:bg-gray-50 dark:hover:bg-gray-800 rounded"
+            className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:text-gray-200 p-1.5 md:px-2 md:py-1 hover:bg-gray-50 dark:hover:bg-gray-800 rounded"
             title="Sign out"
             aria-label="Sign out"
           >
@@ -719,6 +772,12 @@ export default function QuoteBuilder() {
               <Line label={`STC discount (ZN${zone})`} value={`−${formatCurrency(stc)}`} valueColor="text-green-600 dark:text-green-400" />
               <Line label={`Extras (${selectedExtras.length})`} value={formatCurrency(extrasTotal)} />
             </div>
+
+            {matchedPackage && inboundDiscount === 0 && (
+              <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400 italic">
+                No inbound discount configured for this package — standard pricing shown.
+              </p>
+            )}
 
             {matchedPackage && (
               <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
