@@ -101,9 +101,7 @@ export default function QuoteBuilder() {
   const includesHvac = HAS_HVAC.includes(productSet)
 
   useEffect(() => {
-    supabase.from('packages').select('*').eq('active', true).then(({ data }) => {
-      if (data) setPackages(data)
-    })
+    // Extras, variants, recent quotes don't depend on profile - load immediately
     supabase.from('extras').select('*').eq('active', true).then(({ data }) => {
       if (data) setExtras(data)
     })
@@ -114,6 +112,23 @@ export default function QuoteBuilder() {
     loadPricingVersion()
     loadRecentQuotes()
   }, [])
+
+  // Load packages once we know the user's role.
+  // Specialists see only 'standard' channel packages; admins see everything.
+  useEffect(() => {
+    if (!profile) return
+    const query = supabase.from('packages').select('*').eq('active', true)
+    const filtered = profile.role === 'admin'
+      ? query
+      : query.contains('channels', ['standard'])
+    filtered.then(({ data, error }) => {
+      if (error) {
+        console.error('Failed to load packages:', error)
+        return
+      }
+      if (data) setPackages(data)
+    })
+  }, [profile])
 
   const loadProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser()

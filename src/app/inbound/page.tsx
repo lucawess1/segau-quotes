@@ -110,9 +110,6 @@ export default function QuoteBuilder() {
   const includesHvac = HAS_HVAC.includes(productSet)
 
   useEffect(() => {
-    supabase.from('packages').select('*').eq('active', true).then(({ data }) => {
-      if (data) setPackages(data)
-    })
     supabase.from('extras').select('*').eq('active', true).then(({ data }) => {
       if (data) setExtras(data)
     })
@@ -132,6 +129,23 @@ export default function QuoteBuilder() {
     loadPricingVersion()
     loadRecentQuotes()
   }, [])
+
+  // Load packages once we know the user's role.
+  // Specialists see only 'inbound' channel packages; admins see everything.
+  useEffect(() => {
+    if (!profile) return
+    const query = supabase.from('packages').select('*').eq('active', true)
+    const filtered = profile.role === 'admin'
+      ? query
+      : query.contains('channels', ['inbound'])
+    filtered.then(({ data, error }) => {
+      if (error) {
+        console.error('Failed to load packages:', error)
+        return
+      }
+      if (data) setPackages(data)
+    })
+  }, [profile])
 
   // Access guard: if profile loads and user isn't on inbound team, kick them back to /
   useEffect(() => {
