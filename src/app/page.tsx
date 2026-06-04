@@ -92,6 +92,9 @@ export default function QuoteBuilder() {
   // Logged-in user's profile (loaded once on mount)
   const [profile, setProfile] = useState<Profile | null>(null)
 
+  // Current pricing version (stamped onto saved quotes for historical lookup)
+  const [pricingVersionId, setPricingVersionId] = useState<string | null>(null)
+
   const includesBattery = HAS_BATTERY.includes(productSet)
   const includesSolar = HAS_SOLAR.includes(productSet)
   const includesHwhp = HAS_HWHP.includes(productSet)
@@ -108,6 +111,7 @@ export default function QuoteBuilder() {
       if (data) setVariants(data)
     })
     loadProfile()
+    loadPricingVersion()
     loadRecentQuotes()
   }, [])
 
@@ -124,6 +128,21 @@ export default function QuoteBuilder() {
       return
     }
     if (data) setProfile(data as Profile)
+  }
+
+  // Load the currently active pricing version so we can stamp it on saved quotes
+  const loadPricingVersion = async () => {
+    const { data, error } = await supabase
+      .from('pricing_versions')
+      .select('id')
+      .eq('is_current', true)
+      .single()
+    if (error) {
+      // Non-fatal — quotes will just save with null pricing_version_id
+      console.warn('Could not load current pricing version:', error)
+      return
+    }
+    if (data) setPricingVersionId(data.id)
   }
 
   const signOut = async () => {
@@ -423,6 +442,7 @@ export default function QuoteBuilder() {
         extras_total: extrasTotal,
         total_price: total,
         status: 'draft',
+        pricing_version_id: pricingVersionId,
       })
       .select()
       .single()

@@ -98,6 +98,9 @@ export default function QuoteBuilder() {
   // Logged-in user's profile (loaded once on mount)
   const [profile, setProfile] = useState<Profile | null>(null)
 
+  // Current pricing version (stamped onto saved quotes for historical lookup)
+  const [pricingVersionId, setPricingVersionId] = useState<string | null>(null)
+
   // Inbound discounts (loaded once on mount; map of package_id -> discount_amount)
   const [discounts, setDiscounts] = useState<Map<number, number>>(new Map())
 
@@ -126,6 +129,7 @@ export default function QuoteBuilder() {
       }
     })
     loadProfile()
+    loadPricingVersion()
     loadRecentQuotes()
   }, [])
 
@@ -141,7 +145,7 @@ export default function QuoteBuilder() {
     if (!user) return
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, role, full_name')
+      .select('id, email, role, full_name, teams')
       .eq('id', user.id)
       .single()
     if (error) {
@@ -149,6 +153,20 @@ export default function QuoteBuilder() {
       return
     }
     if (data) setProfile(data as Profile)
+  }
+
+  // Load the currently active pricing version so we can stamp it on saved quotes
+  const loadPricingVersion = async () => {
+    const { data, error } = await supabase
+      .from('pricing_versions')
+      .select('id')
+      .eq('is_current', true)
+      .single()
+    if (error) {
+      console.warn('Could not load current pricing version:', error)
+      return
+    }
+    if (data) setPricingVersionId(data.id)
   }
 
   const signOut = async () => {
@@ -476,6 +494,7 @@ export default function QuoteBuilder() {
         total_price: total,
         status: 'draft',
         is_inbound_pricing: true,
+        pricing_version_id: pricingVersionId,
       })
       .select()
       .single()
