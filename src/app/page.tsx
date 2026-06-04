@@ -35,19 +35,20 @@ type SavedQuote = {
   created_at: string | null
 }
 
-const HAS_BATTERY = ['Solar & Battery', 'Battery Only', 'Battery Only - Additional', 'HWHP & Battery', 'HWHP, Solar & Battery']
-const HAS_SOLAR = ['Solar Only', 'Solar & Battery', 'HWHP, Solar & Battery']
-const HAS_HWHP = ['HWHP Only', 'HWHP & Battery', 'HWHP, Solar & Battery']
+const HAS_BATTERY = ['Solar and Battery', 'Battery Only', 'Battery Only - Additional', 'Battery and HWHP', 'HWHP, Solar and Battery']
+const HAS_SOLAR = ['Solar Only', 'Solar and Battery', 'Solar and HWHP', 'HWHP, Solar and Battery']
+const HAS_HWHP = ['HWHP Only', 'Battery and HWHP', 'Solar and HWHP', 'HWHP, Solar and Battery']
 const HAS_HVAC = ['HVAC']
 
 const VISIBLE_PRODUCT_SETS = [
   'Solar Only',
-  'Solar & Battery',
+  'Solar and Battery',
   'Battery Only',
   'Battery Only - Additional',
   'HWHP Only',
-  'HWHP & Battery',
-  'HWHP, Solar & Battery',
+  'Battery and HWHP',
+  'Solar and HWHP',
+  'HWHP, Solar and Battery',
   'HVAC',
 ]
 
@@ -56,7 +57,7 @@ export default function QuoteBuilder() {
   const [extras, setExtras] = useState<Extra[]>([])
   const [variants, setVariants] = useState<PriceVariant[]>([])
 
-  const [productSet, setProductSet] = useState<string>('Solar & Battery')
+  const [productSet, setProductSet] = useState<string>('Solar and Battery')
   const [brand, setBrand] = useState<string>('ALPHA')
   const [batteryKwh, setBatteryKwh] = useState<number>(10)
   const [panels, setPanels] = useState<number>(15)
