@@ -67,6 +67,9 @@ export default function QuoteBuilder() {
   const [hvacKw, setHvacKw] = useState<number>(13)
   const [inverterPhase, setInverterPhase] = useState<string>('1PH')
   const [inverterParalleled, setInverterParalleled] = useState<boolean>(false)
+  // 'AC-only' or 'Hybrid' - used to disambiguate ANKER battery inverters
+  // (X1-P*** = AC-only, X1-H*** = Hybrid). Default to AC-only since that's most common for Battery Only deals.
+  const [inverterType, setInverterType] = useState<'AC-only' | 'Hybrid'>('AC-only')
 
   const [territory, setTerritory] = useState<'Metro' | 'Regional'>('Metro')
   const [zone, setZone] = useState(3)
@@ -259,8 +262,38 @@ export default function QuoteBuilder() {
     return Array.from(set).sort()
   }, [inverterCandidates, availablePhases, inverterPhase])
 
+  // Classify a battery_inverter model string as 'AC-only' or 'Hybrid'.
+  // Currently ANKER-specific: X1-H*** = Hybrid, X1-P*** = AC-only.
+  // Other brands return null (no type distinction needed).
+  const classifyInverterType = (model: string | null | undefined): 'AC-only' | 'Hybrid' | null => {
+    if (!model) return null
+    if (model.startsWith('X1-H')) return 'Hybrid'
+    if (model.startsWith('X1-P')) return 'AC-only'
+    return null
+  }
+
+  // Find which inverter types (AC-only / Hybrid) exist for the current selection
+  const availableInverterTypes = useMemo(() => {
+    // Start from packages matching brand/kwh/phase/paralleled
+    let matching = inverterCandidates
+    if (availablePhases.length > 1) {
+      matching = matching.filter(p => p.inverter_phase === inverterPhase)
+    }
+    if (availableParalleled.length > 1) {
+      matching = matching.filter(p => p.inverter_paralleled === inverterParalleled)
+    }
+    const types = new Set<'AC-only' | 'Hybrid'>()
+    matching.forEach(p => {
+      const t = classifyInverterType(p.battery_inverter)
+      if (t) types.add(t)
+    })
+    // Sort: AC-only first (the default), Hybrid second
+    return Array.from(types).sort((a, b) => (a === 'AC-only' ? -1 : 1))
+  }, [inverterCandidates, availablePhases, inverterPhase, availableParalleled, inverterParalleled])
+
   const showPhaseFilter = availablePhases.length > 1
   const showParalleledFilter = availableParalleled.length > 1
+  const showInverterTypeFilter = availableInverterTypes.length > 1
 
   // Auto-correct out-of-range selections
   useEffect(() => {
@@ -323,6 +356,12 @@ export default function QuoteBuilder() {
     }
   }, [availableParalleled, inverterParalleled, showParalleledFilter])
 
+  useEffect(() => {
+    if (showInverterTypeFilter && !availableInverterTypes.includes(inverterType)) {
+      setInverterType(availableInverterTypes[0])
+    }
+  }, [availableInverterTypes, inverterType, showInverterTypeFilter])
+
   // Match a package
   const matchedPackage = setPackages_.find(p => {
     const specs = (p.specs as any) || {}
@@ -343,6 +382,7 @@ export default function QuoteBuilder() {
     }
     if (showPhaseFilter && p.inverter_phase !== inverterPhase) return false
     if (showParalleledFilter && p.inverter_paralleled !== inverterParalleled) return false
+    if (showInverterTypeFilter && classifyInverterType(p.battery_inverter) !== inverterType) return false
     return true
   })
 
@@ -613,6 +653,17 @@ export default function QuoteBuilder() {
                     options={availableParalleled.map(v => v ? 'paralleled' : 'single')}
                     labels={availableParalleled.map(v => v ? 'Paralleled ×2' : 'Single')}
                     onChange={v => setInverterParalleled(v === 'paralleled')}
+                  />
+                </>
+              )}
+
+              {showInverterTypeFilter && (
+                <>
+                  <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Inverter type</label>
+                  <SegmentedControl
+                    value={inverterType}
+                    options={availableInverterTypes}
+                    onChange={v => setInverterType(v as 'AC-only' | 'Hybrid')}
                   />
                 </>
               )}
