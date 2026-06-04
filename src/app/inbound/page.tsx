@@ -69,14 +69,14 @@ export default function QuoteBuilder() {
   const [panels, setPanels] = useState<number>(15)
   const [hwhpLitres, setHwhpLitres] = useState<number>(280)
   const [hwhpModel, setHwhpModel] = useState<string>('EHPG VM')
-  const [hvacType, setHvacType] = useState<string>('Inverter split')
-  const [hvacKw, setHvacKw] = useState<number>(2.5)
+  const [hvacType, setHvacType] = useState<string>('Ducted')
+  const [hvacKw, setHvacKw] = useState<number>(13)
   const [inverterPhase, setInverterPhase] = useState<string>('1PH')
   const [inverterParalleled, setInverterParalleled] = useState<boolean>(false)
 
   const [territory, setTerritory] = useState<'Metro' | 'Regional'>('Metro')
   const [zone, setZone] = useState(3)
-  const [financeTerm, setFinanceTerm] = useState<'Cash' | '60m' | '84m'>('Cash')
+  const [financeTerm, setFinanceTerm] = useState<'Cash' | '60m' | '84m'>('60m')
 
   const [selectedExtras, setSelectedExtras] = useState<QuoteExtra[]>([])
   const [showExtraPicker, setShowExtraPicker] = useState(false)
@@ -561,23 +561,30 @@ export default function QuoteBuilder() {
   ].filter(Boolean).join(' + ') || 'Nothing selected'
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+    <div className="min-h-screen bg-amber-50/30 dark:bg-amber-950/10">
+    {/* Strong amber strip across the top of the page */}
+    <div className="h-1.5 bg-amber-500 dark:bg-amber-600 w-full" />
     <main className="max-w-5xl mx-auto p-3 md:p-6 pb-24 md:pb-6">
-      {/* Inbound mode banner */}
-      <div className="mb-3 px-3 py-2 rounded-md bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 flex items-center gap-2">
-        <Info className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400 flex-shrink-0" />
-        <p className="text-xs text-amber-800 dark:text-amber-300">
-          <span className="font-medium">Inbound pricing mode</span> — discounted prices applied to eligible packages.
-          <a href="/" className="ml-1.5 underline hover:no-underline">Switch to standard</a>
+      {/* Inbound mode banner - prominent */}
+      <div className="mb-4 px-4 py-3 rounded-lg bg-amber-100 dark:bg-amber-950/60 border-2 border-amber-300 dark:border-amber-700 flex items-center gap-2.5">
+        <div className="bg-amber-500 dark:bg-amber-600 rounded-full p-1 flex-shrink-0">
+          <Info className="w-3.5 h-3.5 text-white" />
+        </div>
+        <p className="text-sm text-amber-900 dark:text-amber-200 flex-1">
+          <span className="font-semibold">INBOUND PRICING MODE</span>
+          <span className="hidden sm:inline"> — discounted prices applied to eligible packages.</span>
+          <a href="/" className="ml-2 underline font-medium hover:no-underline">Switch to standard</a>
         </p>
       </div>
 
-      <header className="flex items-center justify-between pb-3 mb-4 md:mb-5 border-b border-gray-200 dark:border-gray-700 gap-2">
+      <header className="flex items-center justify-between pb-3 mb-4 md:mb-5 border-b-2 border-amber-300 dark:border-amber-700 gap-2">
         <div className="flex items-center gap-2 md:gap-2.5 min-w-0">
           <Zap className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-          <div className="min-w-0">
-            <p className="font-medium text-sm md:text-[15px] truncate">SEGAU Price Builder — Inbound</p>
-            <p className="hidden md:block text-xs text-gray-500 dark:text-gray-400">Pricing v2026.05.05 · last updated 5 May</p>
+          <div className="min-w-0 flex items-center gap-2">
+            <p className="font-medium text-sm md:text-[15px] truncate">SEGAU Quote Builder</p>
+            <span className="text-[10px] uppercase tracking-wider font-bold bg-amber-500 dark:bg-amber-600 text-white px-2 py-0.5 rounded">
+              Inbound
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-1 md:gap-3 flex-shrink-0">
@@ -742,15 +749,19 @@ export default function QuoteBuilder() {
 
               {showExtraPicker && (
                 <div className="mb-2 border border-gray-200 dark:border-gray-700 rounded-md p-2 max-h-48 overflow-y-auto text-sm">
-                  {extras.map(e => (
-                    <button key={e.id} onClick={() => addExtra(e)}
-                      className="w-full text-left px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex justify-between items-center">
-                      <span>{e.name}</span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">
-                        {e.charge_type === 'Per Panel' ? `$${e.unit_price}/panel` : formatCurrency(e.unit_price)}
-                      </span>
-                    </button>
-                  ))}
+                  {extras.length === 0 ? (
+                    <p className="text-xs text-gray-400 dark:text-gray-500 italic py-2 px-1 text-center">Loading extras…</p>
+                  ) : (
+                    extras.map(e => (
+                      <button key={e.id} onClick={() => addExtra(e)}
+                        className="w-full text-left px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex justify-between items-center">
+                        <span>{e.name}</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">
+                          {e.charge_type === 'Per Panel' ? `$${e.unit_price}/panel` : formatCurrency(e.unit_price)}
+                        </span>
+                      </button>
+                    ))
+                  )}
                 </div>
               )}
 
