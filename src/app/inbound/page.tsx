@@ -47,10 +47,10 @@ const HAS_HWHP = ['HWHP Only', 'Battery and HWHP', 'Solar and HWHP', 'HWHP, Sola
 const HAS_HVAC = ['HVAC']
 
 const VISIBLE_PRODUCT_SETS = [
-  'Solar Only',
   'Solar and Battery',
   'Battery Only',
   'Battery Only - Additional',
+  'Solar Only',
   'HWHP Only',
   'Battery and HWHP',
   'Solar and HWHP',
