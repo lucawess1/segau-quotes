@@ -69,14 +69,14 @@ export default function QuoteBuilder() {
   const [panels, setPanels] = useState<number>(15)
   const [hwhpLitres, setHwhpLitres] = useState<number>(280)
   const [hwhpModel, setHwhpModel] = useState<string>('EHPG VM')
-  const [hvacType, setHvacType] = useState<string>('Ducted')
-  const [hvacKw, setHvacKw] = useState<number>(13)
+  const [hvacType, setHvacType] = useState<string>('Inverter Split')
+  const [hvacKw, setHvacKw] = useState<number>(2.5)
   const [inverterPhase, setInverterPhase] = useState<string>('1PH')
   const [inverterParalleled, setInverterParalleled] = useState<boolean>(false)
 
   const [territory, setTerritory] = useState<'Metro' | 'Regional'>('Metro')
   const [zone, setZone] = useState(3)
-  const [financeTerm, setFinanceTerm] = useState<'Cash' | '60m' | '84m'>('60m')
+  const [financeTerm, setFinanceTerm] = useState<'Cash' | '60m' | '84m'>('Cash')
 
   const [selectedExtras, setSelectedExtras] = useState<QuoteExtra[]>([])
   const [showExtraPicker, setShowExtraPicker] = useState(false)
