@@ -61,6 +61,8 @@ const VISIBLE_PRODUCT_SETS = [
 export default function QuoteBuilder() {
   const [packages, setPackages] = useState<Package[]>([])
   const [extras, setExtras] = useState<Extra[]>([])
+  // 'pending' = waiting for fetch, 'loaded' = data ready, 'error' = fetch timed out / failed
+  const [extrasStatus, setExtrasStatus] = useState<'pending' | 'loaded' | 'error'>('pending')
   const [variants, setVariants] = useState<PriceVariant[]>([])
 
   const [productSet, setProductSet] = useState<string>('Solar and Battery')
@@ -114,9 +116,8 @@ export default function QuoteBuilder() {
   const includesHvac = HAS_HVAC.includes(productSet)
 
   useEffect(() => {
-    supabase.from('extras').select('*').eq('active', true).then(({ data }) => {
-      if (data) setExtras(data)
-    })
+    loadExtrasWithCache()
+
     supabase.from('price_variants').select('*').then(({ data }) => {
       if (data) setVariants(data)
     })
@@ -133,6 +134,41 @@ export default function QuoteBuilder() {
     loadPricingVersion()
     loadRecentQuotes()
   }, [])
+
+  const loadExtrasWithCache = async () => {
+    const CACHE_KEY = 'segpb_extras_cache'
+    const CACHE_TTL_MS = 60 * 60 * 1000 // 1 hour
+
+    try {
+      const cached = localStorage.getItem(CACHE_KEY)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (parsed.timestamp && Date.now() - parsed.timestamp < CACHE_TTL_MS && Array.isArray(parsed.data)) {
+          setExtras(parsed.data)
+          setExtrasStatus('loaded')
+        }
+      }
+    } catch {}
+
+    const timeoutPromise = new Promise<{ data: null; error: { message: string } }>(resolve =>
+      setTimeout(() => resolve({ data: null, error: { message: 'timeout' } }), 5000)
+    )
+    const fetchPromise = supabase.from('extras').select('*').eq('active', true).then(r => ({ data: r.data, error: r.error }))
+
+    const result = await Promise.race([fetchPromise, timeoutPromise])
+
+    if (result.error || !result.data) {
+      setExtrasStatus(prev => prev === 'loaded' ? 'loaded' : 'error')
+      return
+    }
+
+    setExtras(result.data)
+    setExtrasStatus('loaded')
+
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: result.data }))
+    } catch {}
+  }
 
   // Load packages once we know the user's role.
   // Specialists see only 'inbound' channel packages; admins see everything.
@@ -798,8 +834,18 @@ export default function QuoteBuilder() {
 
               {showExtraPicker && (
                 <div className="mb-2 border border-gray-200 dark:border-gray-700 rounded-md p-2 max-h-48 overflow-y-auto text-sm">
-                  {extras.length === 0 ? (
+                  {extrasStatus === 'pending' && extras.length === 0 ? (
                     <p className="text-xs text-gray-400 dark:text-gray-500 italic py-2 px-1 text-center">Loading extras…</p>
+                  ) : extrasStatus === 'error' && extras.length === 0 ? (
+                    <div className="py-2 px-1 text-center">
+                      <p className="text-xs text-red-600 dark:text-red-400 mb-1.5">Couldn't load extras.</p>
+                      <button
+                        onClick={() => { setExtrasStatus('pending'); loadExtrasWithCache() }}
+                        className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        Retry
+                      </button>
+                    </div>
                   ) : (
                     extras.map(e => (
                       <button key={e.id} onClick={() => addExtra(e)}
