@@ -70,7 +70,7 @@ export default function QuoteBuilder() {
 
   const [territory, setTerritory] = useState<'Metro' | 'Regional'>('Metro')
   const [zone, setZone] = useState(3)
-  const [financeTerm, setFinanceTerm] = useState<'Cash' | '60m' | '84m'>('60m')
+  const [financeTerm, setFinanceTerm] = useState<'Cash' | '60m' | '84m'>('Cash')
 
   const [selectedExtras, setSelectedExtras] = useState<QuoteExtra[]>([])
   const [showExtraPicker, setShowExtraPicker] = useState(false)
