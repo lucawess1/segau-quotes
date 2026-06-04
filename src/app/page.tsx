@@ -63,7 +63,7 @@ export default function QuoteBuilder() {
   const [panels, setPanels] = useState<number>(15)
   const [hwhpLitres, setHwhpLitres] = useState<number>(280)
   const [hwhpModel, setHwhpModel] = useState<string>('EHPG VM')
-  const [hvacType, setHvacType] = useState<string>('Inverter Split')
+  const [hvacType, setHvacType] = useState<string>('Inverter split')
   const [hvacKw, setHvacKw] = useState<number>(2.5)
   const [inverterPhase, setInverterPhase] = useState<string>('1PH')
   const [inverterParalleled, setInverterParalleled] = useState<boolean>(false)
