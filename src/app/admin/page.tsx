@@ -135,7 +135,7 @@ export default function AdminPage() {
           <div className="flex items-center gap-2.5">
             <Zap className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             <div>
-              <p className="font-medium text-[15px]">SEGAU Quote Builder — Admin</p>
+              <p className="font-medium text-[15px]">SEG Pricing Builder — Admin</p>
               <p className="text-xs text-gray-500 dark:text-gray-400">Staging merge console</p>
             </div>
           </div>

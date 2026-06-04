@@ -30,7 +30,7 @@ export default function LoginPage() {
         <div className="flex items-center gap-2.5 mb-6">
           <Zap className="w-6 h-6 text-blue-600 dark:text-blue-400" />
           <div>
-            <p className="font-medium text-gray-900 dark:text-gray-100">SEGAU Quote Builder</p>
+            <p className="font-medium text-gray-900 dark:text-gray-100">SEG Pricing Builder</p>
             <p className="text-xs text-gray-500 dark:text-gray-400">Sign in to continue</p>
           </div>
         </div>
