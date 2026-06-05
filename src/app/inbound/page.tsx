@@ -719,9 +719,21 @@ export default function QuoteBuilder() {
                   <div className="flex items-center gap-3">
                     <input type="range" min={panelRange.min} max={panelRange.max} value={panels}
                       onChange={e => setPanels(Number(e.target.value))} className="flex-1" />
-                    <span className="text-sm font-medium min-w-[80px] text-right">
-                      {panels} ({systemSize} kW)
-                    </span>
+                    <div className="flex items-center gap-1.5 min-w-[110px]">
+                      <input
+                        type="number"
+                        min={panelRange.min}
+                        max={panelRange.max}
+                        value={panels}
+                        onChange={e => {
+                          const n = Number(e.target.value)
+                          if (Number.isNaN(n)) return
+                          setPanels(Math.max(panelRange.min, Math.min(panelRange.max, n)))
+                        }}
+                        className="w-14 px-2 py-1 text-sm font-medium text-right border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 focus:outline-none focus:border-gray-400 dark:focus:border-gray-500"
+                      />
+                      <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{systemSize} kW</span>
+                    </div>
                   </div>
                 </>
               )}
