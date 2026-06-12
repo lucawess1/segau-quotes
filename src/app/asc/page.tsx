@@ -21,6 +21,7 @@ type Profile = {
 type Discount = {
   package_id: number
   discount_amount: number
+  asc_discount_amount: number
   notes: string | null
 }
 
