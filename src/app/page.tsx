@@ -161,6 +161,14 @@ export default function QuoteBuilder() {
     }
   }
 
+  // Access guard: if user is on the ASC team (external partner), redirect them to /asc
+  // They should not be able to see the standard calculator at all.
+  useEffect(() => {
+    if (profile && profile.role !== 'admin' && profile.teams?.includes('asc')) {
+      window.location.href = '/asc'
+    }
+  }, [profile])
+
   // Load packages once we know the user's role.
   // Specialists see only 'standard' channel packages; admins see everything.
   useEffect(() => {
@@ -612,6 +620,15 @@ export default function QuoteBuilder() {
               title="Switch to inbound pricing calculator"
             >
               Inbound pricing →
+            </a>
+          )}
+          {profile && profile.role === 'admin' && (
+            <a
+              href="/asc"
+              className="hidden md:inline-flex items-center gap-1 text-xs text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 px-2 py-1 rounded hover:bg-teal-50 dark:hover:bg-teal-950/50"
+              title="Switch to ASC pricing calculator"
+            >
+              ASC pricing →
             </a>
           )}
           <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 max-w-[120px] md:max-w-none">

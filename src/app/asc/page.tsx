@@ -81,7 +81,8 @@ export default function QuoteBuilder() {
 
   const [territory, setTerritory] = useState<'Metro' | 'Regional'>('Metro')
   const [zone, setZone] = useState(3)
-  const [financeTerm, setFinanceTerm] = useState<'Cash' | '60m' | '84m'>('Cash')
+  // ASC partner only offers Cash and 60m finance options (no 84m)
+  const [financeTerm, setFinanceTerm] = useState<'Cash' | '60m'>('Cash')
 
   const [selectedExtras, setSelectedExtras] = useState<QuoteExtra[]>([])
   const [showExtraPicker, setShowExtraPicker] = useState(false)
@@ -125,7 +126,7 @@ export default function QuoteBuilder() {
       if (data) {
         const map = new Map<number, number>()
         for (const d of data as Discount[]) {
-          map.set(d.package_id, d.discount_amount)
+          map.set(d.package_id, d.asc_discount_amount)
         }
         setDiscounts(map)
       }
@@ -177,7 +178,7 @@ export default function QuoteBuilder() {
     const query = supabase.from('packages').select('*').eq('active', true)
     const filtered = profile.role === 'admin'
       ? query
-      : query.contains('channels', ['inbound'])
+      : query.contains('channels', ['asc'])
     filtered.then(({ data, error }) => {
       if (error) {
         console.error('Failed to load packages:', error)
@@ -187,15 +188,9 @@ export default function QuoteBuilder() {
     })
   }, [profile])
 
-  // Access guard: ASC users go to /asc, non-inbound non-admins go to /
+  // Access guard: if profile loads and user isn't on inbound team, kick them back to /
   useEffect(() => {
-    if (!profile) return
-    if (profile.role === 'admin') return
-    if (profile.teams?.includes('asc')) {
-      window.location.href = '/asc'
-      return
-    }
-    if (!profile.teams?.includes('inbound')) {
+    if (profile && !profile.teams?.includes('asc') && profile.role !== 'admin') {
       window.location.href = '/'
     }
   }, [profile])
@@ -482,7 +477,8 @@ export default function QuoteBuilder() {
   const discountedCashAfterStc = Math.max(0, cashAfterStc - inboundDiscount)
 
   // Derive the after-STC price for the currently selected finance term
-  const financeMultiplier = financeTerm === 'Cash' ? 1 : financeTerm === '60m' ? 0.80 : 0.70
+  // ASC: Cash = 1.0, 60m = 0.80 (no 84m available)
+  const financeMultiplier = financeTerm === 'Cash' ? 1 : 0.80
   const afterStc = discountedCashAfterStc / financeMultiplier
   const base = afterStc + stc
   const total = afterStc + extrasTotal
@@ -588,7 +584,7 @@ export default function QuoteBuilder() {
         extras_total: extrasTotal,
         total_price: total,
         status: 'draft',
-        is_inbound_pricing: true,
+        is_asc_pricing: true,
         pricing_version_id: pricingVersionId,
       })
       .select()
@@ -641,28 +637,28 @@ export default function QuoteBuilder() {
   ].filter(Boolean).join(' + ') || 'Nothing selected'
 
   return (
-    <div className="min-h-screen bg-amber-50/30 dark:bg-amber-950/10">
-    {/* Strong amber strip across the top of the page */}
-    <div className="h-1.5 bg-amber-500 dark:bg-amber-600 w-full" />
+    <div className="min-h-screen bg-teal-50/30 dark:bg-teal-950/10">
+    {/* Strong teal strip across the top of the page */}
+    <div className="h-1.5 bg-teal-500 dark:bg-teal-600 w-full" />
     <main className="max-w-5xl mx-auto p-3 md:p-6 pb-24 md:pb-6">
       {/* Inbound mode banner - prominent */}
-      <div className="mb-4 px-4 py-3 rounded-lg bg-amber-100 dark:bg-amber-950/60 border-2 border-amber-300 dark:border-amber-700 flex items-center gap-2.5">
-        <div className="bg-amber-500 dark:bg-amber-600 rounded-full p-1 flex-shrink-0">
+      <div className="mb-4 px-4 py-3 rounded-lg bg-teal-100 dark:bg-teal-950/60 border-2 border-teal-300 dark:border-teal-700 flex items-center gap-2.5">
+        <div className="bg-teal-500 dark:bg-teal-600 rounded-full p-1 flex-shrink-0">
           <Info className="w-3.5 h-3.5 text-white" />
         </div>
-        <p className="text-sm text-amber-900 dark:text-amber-200 flex-1">
-          <span className="font-semibold">INBOUND PRICING MODE</span>
-          <span className="hidden sm:inline"> — discounted prices applied to eligible packages.</span>
-          <a href="/" className="ml-2 underline font-medium hover:no-underline">Switch to standard</a>
+        <p className="text-sm text-teal-900 dark:text-teal-200 flex-1">
+          <span className="font-semibold">ASC PRICING MODE</span>
+          <span className="hidden sm:inline"> — ASC partner pricing for authorised use.</span>
+          
         </p>
       </div>
 
-      <header className="flex items-center justify-between pb-3 mb-4 md:mb-5 border-b-2 border-amber-300 dark:border-amber-700 gap-2">
+      <header className="flex items-center justify-between pb-3 mb-4 md:mb-5 border-b-2 border-teal-300 dark:border-teal-700 gap-2">
         <div className="flex items-center gap-2 md:gap-2.5 min-w-0">
-          <Zap className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+          <Zap className="w-5 h-5 text-teal-600 dark:text-teal-400 flex-shrink-0" />
           <div className="min-w-0 flex items-center gap-2">
             <p className="font-medium text-sm md:text-[15px] truncate">SEG Pricing Builder</p>
-            <span className="text-[10px] uppercase tracking-wider font-bold bg-amber-500 dark:bg-amber-600 text-white px-2 py-0.5 rounded">
+            <span className="text-[10px] uppercase tracking-wider font-bold bg-teal-500 dark:bg-teal-600 text-white px-2 py-0.5 rounded">
               Inbound
             </span>
           </div>
@@ -834,9 +830,9 @@ export default function QuoteBuilder() {
                 <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Finance</label>
                 <SegmentedControl
                   value={financeTerm}
-                  options={['Cash', '60m', '84m']}
-                  labels={['Cash', 'BNPL 60m', 'BNPL 84m']}
-                  onChange={v => setFinanceTerm(v as 'Cash' | '60m' | '84m')}
+                  options={['Cash', '60m']}
+                  labels={['Cash', 'BNPL 60m']}
+                  onChange={v => setFinanceTerm(v as 'Cash' | '60m')}
                 />
               </div>
             </div>
@@ -989,9 +985,9 @@ export default function QuoteBuilder() {
               </div>
             )}
 
-            <div className={`mt-3 px-3 py-2.5 rounded-md flex gap-2 items-start ${quotedItems > 0 ? 'bg-amber-50 dark:bg-amber-950/50' : 'bg-blue-50 dark:bg-blue-950/50'}`}>
-              <Info className={`w-4 h-4 flex-shrink-0 mt-0.5 ${quotedItems > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-300'}`} />
-              <p className={`text-xs leading-relaxed ${quotedItems > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-300'}`}>
+            <div className={`mt-3 px-3 py-2.5 rounded-md flex gap-2 items-start ${quotedItems > 0 ? 'bg-teal-50 dark:bg-teal-950/50' : 'bg-blue-50 dark:bg-blue-950/50'}`}>
+              <Info className={`w-4 h-4 flex-shrink-0 mt-0.5 ${quotedItems > 0 ? 'text-teal-700 dark:text-teal-400' : 'text-blue-700 dark:text-blue-300'}`} />
+              <p className={`text-xs leading-relaxed ${quotedItems > 0 ? 'text-teal-700 dark:text-teal-400' : 'text-blue-700 dark:text-blue-300'}`}>
                 {quotedItems > 0
                   ? `Includes ${quotedItems} QUOTED item${quotedItems > 1 ? 's' : ''} — confirm with Tech before sending.`
                   : 'All prices fixed — ready to send to customer.'}
@@ -1009,7 +1005,7 @@ export default function QuoteBuilder() {
               ) : (
                 <button
                   onClick={() => setShowPricingDialog(true)}
-                  className="hidden md:flex w-full py-2 text-sm border rounded-md transition-colors items-center justify-center gap-1.5 bg-amber-600 dark:bg-amber-500 text-white border-amber-600 dark:border-amber-500 hover:bg-amber-700 dark:hover:bg-amber-600"
+                  className="hidden md:flex w-full py-2 text-sm border rounded-md transition-colors items-center justify-center gap-1.5 bg-teal-600 dark:bg-teal-500 text-white border-teal-600 dark:border-teal-500 hover:bg-teal-700 dark:hover:bg-teal-600"
                 >
                   <Info className="w-3.5 h-3.5" /> Request pricing
                 </button>
@@ -1021,7 +1017,7 @@ export default function QuoteBuilder() {
                 </div>
               )}
               {pricingConfirmation && (
-                <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
+                <div className="text-xs text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/50 border border-teal-200 dark:border-teal-800 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
                   <Check className="w-3.5 h-3.5 flex-shrink-0" />
                   Pricing request submitted. The team will review and add it.
                 </div>
@@ -1235,7 +1231,7 @@ export default function QuoteBuilder() {
                 <button
                   onClick={submitPricingRequest}
                   disabled={submittingPricing}
-                  className="flex-1 py-2.5 md:py-2 text-sm bg-amber-600 dark:bg-amber-500 text-white rounded-md hover:bg-amber-700 dark:hover:bg-amber-600 disabled:opacity-50 min-h-[44px] md:min-h-0"
+                  className="flex-1 py-2.5 md:py-2 text-sm bg-teal-600 dark:bg-teal-500 text-white rounded-md hover:bg-teal-700 dark:hover:bg-teal-600 disabled:opacity-50 min-h-[44px] md:min-h-0"
                 >
                   {submittingPricing ? 'Submitting…' : 'Submit request'}
                 </button>
@@ -1257,7 +1253,7 @@ export default function QuoteBuilder() {
             </>
           ) : (
             <>
-              <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-tight">No pricing available</p>
+              <p className="text-[11px] text-teal-700 dark:text-teal-400 leading-tight">No pricing available</p>
               <p className="text-sm leading-tight text-gray-600 dark:text-gray-300">Request team to add it</p>
             </>
           )}
@@ -1273,7 +1269,7 @@ export default function QuoteBuilder() {
         ) : (
           <button
             onClick={() => setShowPricingDialog(true)}
-            className="px-4 py-2.5 bg-amber-600 dark:bg-amber-500 text-white rounded-md text-sm font-medium flex items-center gap-1.5 min-h-[44px]"
+            className="px-4 py-2.5 bg-teal-600 dark:bg-teal-500 text-white rounded-md text-sm font-medium flex items-center gap-1.5 min-h-[44px]"
           >
             <Info className="w-4 h-4" />
             Request
@@ -1324,7 +1320,7 @@ function Badge({ type }: { type: string }) {
   const colors: Record<string, string> = {
     'Per Panel': 'bg-blue-50 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300',
     'Flat Fee': 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200',
-    'QUOTED': 'bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-400',
+    'QUOTED': 'bg-teal-50 dark:bg-teal-950/50 text-teal-800 dark:text-teal-400',
     'Variable': 'bg-purple-50 dark:bg-purple-950/50 text-purple-800 dark:text-purple-400',
   }
   const labels: Record<string, string> = {
@@ -1366,7 +1362,7 @@ function SpecRow({ label, value, fallback }: {
       <span className="text-gray-500 dark:text-gray-400 dark:text-gray-500 flex-shrink-0">{label}</span>
       <span
         className={
-          isMissing ? 'text-amber-600 dark:text-amber-400 italic' :
+          isMissing ? 'text-teal-600 dark:text-teal-400 italic' :
           isFallback ? 'text-gray-400 dark:text-gray-500 italic text-right truncate max-w-[180px]' :
           'text-gray-900 dark:text-gray-100 text-right truncate max-w-[180px]'
         }
