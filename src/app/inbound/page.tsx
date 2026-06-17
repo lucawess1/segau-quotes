@@ -46,6 +46,19 @@ const HAS_SOLAR = ['Solar Only', 'Solar and Battery', 'Solar and HWHP', 'HWHP, S
 const HAS_HWHP = ['HWHP Only', 'Battery and HWHP', 'Solar and HWHP', 'HWHP, Solar and Battery']
 const HAS_HVAC = ['HVAC']
 
+// Inbound channel sells a different panel model under the same prices.
+// This map substitutes display values when rendering — the DB stays as-is
+// so package matching, pricing, and audit history are unaffected.
+// To rename a panel, edit this map. To stop substituting, set the value to ''.
+const PANEL_MODEL_SUBSTITUTIONS: Record<string, string> = {
+  'SPR-P7-440-BLK': 'HSM-ND48-DR440',
+}
+
+const displayPanelModel = (model: string | null | undefined): string => {
+  if (!model) return ''
+  return PANEL_MODEL_SUBSTITUTIONS[model] ?? model
+}
+
 const VISIBLE_PRODUCT_SETS = [
   'Solar and Battery',
   'Battery Only',
@@ -613,6 +626,11 @@ export default function QuoteBuilder() {
         total_price: total,
         status: 'draft',
         is_inbound_pricing: true,
+        // Snapshot of the panel model shown to the customer at sell-time
+        // (may differ from packages.panel_model due to inbound substitution rules)
+        panel_model_display: includesSolar && matchedPackage.panel_model
+          ? displayPanelModel(matchedPackage.panel_model)
+          : null,
         pricing_version_id: pricingVersionId,
       })
       .select()
@@ -986,7 +1004,7 @@ export default function QuoteBuilder() {
                   {includesSolar && (
                     <SpecGroup title="Solar">
                       <SpecRow label="Panels" value={matchedPackage.panel_count ? `${matchedPackage.panel_count} ×` : '—'} />
-                      <SpecRow label="Panel model" value={matchedPackage.panel_model} />
+                      <SpecRow label="Panel model" value={displayPanelModel(matchedPackage.panel_model)} />
                       <SpecRow label="System size" value={matchedPackage.system_size_kw ? `${matchedPackage.system_size_kw} kW` : '—'} />
                       <SpecRow
                         label="PV inverter"
