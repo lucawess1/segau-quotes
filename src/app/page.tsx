@@ -58,6 +58,8 @@ export default function QuoteBuilder() {
   // 'pending' = waiting for fetch, 'loaded' = data ready, 'error' = fetch timed out / failed
   const [extrasStatus, setExtrasStatus] = useState<'pending' | 'loaded' | 'error'>('pending')
   const [variants, setVariants] = useState<PriceVariant[]>([])
+  // Cache of which package_ids we've already fetched variants for (prevents redundant fetches)
+  const [fetchedPackageIds, setFetchedPackageIds] = useState<Set<number>>(new Set())
 
   const [productSet, setProductSet] = useState<string>('Solar and Battery')
   const [brand, setBrand] = useState<string>('ALPHA')
@@ -110,9 +112,8 @@ export default function QuoteBuilder() {
     // Extras: cache-first load with timeout. Extras change rarely so we cache for 1h.
     loadExtrasWithCache()
 
-    supabase.from('price_variants').select('*').then(({ data }) => {
-      if (data) setVariants(data)
-    })
+    // Variants are fetched per-package on demand (when matchedPackage changes).
+    // This avoids loading tens of thousands of price rows on every page open.
     loadProfile()
     loadPricingVersion()
     loadRecentQuotes()
@@ -437,6 +438,28 @@ export default function QuoteBuilder() {
     if (showInverterTypeFilter && classifyInverterType(p.battery_inverter) !== inverterType) return false
     return true
   })
+
+  // Fetch price variants for the matched package on demand.
+  // Cached so re-selecting a previously-fetched package is instant.
+  useEffect(() => {
+    if (!matchedPackage) return
+    if (fetchedPackageIds.has(matchedPackage.id)) return
+    const pkgId = matchedPackage.id
+    supabase
+      .from('price_variants')
+      .select('*')
+      .eq('package_id', pkgId)
+      .then(({ data, error }) => {
+        if (error) {
+          console.error(`Failed to fetch variants for package ${pkgId}:`, error)
+          return
+        }
+        if (data && data.length > 0) {
+          setVariants(prev => [...prev, ...(data as PriceVariant[])])
+          setFetchedPackageIds(prev => new Set(prev).add(pkgId))
+        }
+      })
+  }, [matchedPackage?.id, fetchedPackageIds])
 
   const variant = variants.find(v =>
     v.package_id === matchedPackage?.id &&
