@@ -491,6 +491,7 @@ export default function AdminPage() {
                     <th className="text-left px-3 py-2 font-normal">Date range</th>
                     <th className="text-left px-3 py-2 font-normal">Taken at</th>
                     <th className="text-right px-3 py-2 font-normal">Rows</th>
+                    <th className="text-right px-3 py-2 font-normal">View</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -530,6 +531,14 @@ export default function AdminPage() {
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-xs">
                         {v.row_count != null ? v.row_count.toLocaleString() : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <a
+                          href={`/admin/version/${v.id}?kind=${v.kind}`}
+                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          View →
+                        </a>
                       </td>
                     </tr>
                   ))}
