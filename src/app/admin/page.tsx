@@ -20,7 +20,7 @@ type MergeResult = {
 }
 
 type StagingTable = {
-  key: 'packages' | 'price_variants' | 'discounts' | 'builder_packages' | 'builder_stc'
+  key: 'packages' | 'price_variants' | 'discounts'
   label: string
   tableName: string
   functionName: string
@@ -61,20 +61,6 @@ const STAGING_TABLES: StagingTable[] = [
     tableName: 'discounts_staging',
     functionName: 'merge_discounts',
     description: 'Upsert inbound and ASC discount amounts.',
-  },
-  {
-    key: 'builder_packages',
-    label: 'Builder packages',
-    tableName: 'builder_packages_staging',
-    functionName: 'merge_builder_packages',
-    description: 'Upsert builder upgrade packages (cost-based pricing for builder channel).',
-  },
-  {
-    key: 'builder_stc',
-    label: 'Builder STC values',
-    tableName: 'builder_stc_values_staging',
-    functionName: 'merge_builder_stc',
-    description: 'Upsert STC rebate values by year for builder packages (solar + battery components).',
   },
 ]
 
@@ -260,6 +246,13 @@ export default function AdminPage() {
                 </span>
               </span>
             </div>
+            <a
+              href="/admin/builder"
+              className="inline-flex items-center gap-1 text-xs text-indigo-700 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 px-2 py-1 rounded hover:bg-indigo-50 dark:hover:bg-indigo-950/50"
+              title="Open builder admin page"
+            >
+              Builder admin →
+            </a>
             <button
               onClick={signOut}
               className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-2 py-1 hover:bg-gray-50 dark:hover:bg-gray-800 rounded"
@@ -407,7 +400,7 @@ export default function AdminPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-xs text-gray-600 dark:text-gray-400 mb-0.5 block">Effective from</label>
+                        <label className="text-xs text-gray-600 dark:text-gray-400 mb-0.5 block">Effective from <span className="text-gray-400 dark:text-gray-500">(optional)</span></label>
                         <input
                           type="date"
                           value={priceStartDate}
@@ -416,7 +409,7 @@ export default function AdminPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-600 dark:text-gray-400 mb-0.5 block">Effective until</label>
+                        <label className="text-xs text-gray-600 dark:text-gray-400 mb-0.5 block">Effective until <span className="text-gray-400 dark:text-gray-500">(optional)</span></label>
                         <input
                           type="date"
                           value={priceEndDate}
@@ -436,7 +429,7 @@ export default function AdminPage() {
                       />
                     </div>
                     <p className="text-[10px] text-blue-800 dark:text-blue-400 italic">
-                      Leave name blank to use auto-generated date (e.g. v2026-06-17).
+                      Leave name blank to use auto-generated date (e.g. v2026-06-17). Leave dates blank if not known yet — you can edit them later in Supabase.
                     </p>
                   </div>
                 )}
