@@ -15,12 +15,12 @@ type Profile = {
 }
 
 type Battery = { id: number; code: string; brand: string; kwh: number; model: string | null; cost: number; active: boolean }
-type Inverter = { id: number; code: string; brand: string; phase: string; model: string | null; cost: number; gateway_cost: number; active: boolean }
+type Inverter = { id: number; code: string; brand: string; phase: string; model: string | null; cost: number; gateway_cost: number; emergency_backstop_cost: number; active: boolean }
 type PV = { id: number; code: string; panel_model: string; panel_count: number; system_size_kw: number; cost: number; active: boolean }
 type SolarStc = { system_size_kw: number; year: number; stc_value: number }
 type BatteryStc = { battery_kwh: number; year: number; stc_value: number }
 type BuilderCosts = { product_set: string; product_overhead: number; other_overhead: number; solar_base_install: number; solar_install_per_panel: number; battery_base_install: number; battery_install_per_kwh_over: number }
-type BuilderConfig = { margin_min_pct: number; margin_max_pct: number; margin_default_pct: number; double_storey_per_panel: number; two_stage_cost: number; vic_ces_cost: number; regional_cost: number }
+type BuilderConfig = { margin_min_pct: number; margin_max_pct: number; margin_default_pct: number; double_storey_per_panel: number; tile_per_panel: number; two_stage_cost: number; vic_ces_cost: number; regional_cost: number }
 type SavedQuote = { id: string; quote_number: string; customer_name: string | null; user_id: string | null; created_at: string | null; total_price: number | null; builder_margin_pct: number | null }
 
 const AU_STATES = ['VIC', 'NSW', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT'] as const
@@ -49,11 +49,11 @@ export default function BuilderQuoteBuilder() {
   const [costsByProductSet, setCostsByProductSet] = useState<Map<string, BuilderCosts>>(new Map())
   const [config, setConfig] = useState<BuilderConfig>({
     margin_min_pct: 15, margin_max_pct: 35, margin_default_pct: 20,
-    double_storey_per_panel: 50, two_stage_cost: 250, vic_ces_cost: 250, regional_cost: 500,
+    double_storey_per_panel: 50, tile_per_panel: 50,
+    two_stage_cost: 250, vic_ces_cost: 250, regional_cost: 500,
   })
 
   const currentYear = new Date().getFullYear()
-  const yearOptions = [currentYear, currentYear + 1, currentYear + 2]
 
   const [productSet, setProductSet] = useState<ProductSet>('Solar and Battery')
   const [batteryId, setBatteryId] = useState<number | null>(null)
@@ -63,9 +63,11 @@ export default function BuilderQuoteBuilder() {
   const [year, setYear] = useState<number>(currentYear)
   const [isParalleled, setIsParalleled] = useState(false)
   const [isDoubleStorey, setIsDoubleStorey] = useState(false)
+  const [isTile, setIsTile] = useState(true)  // tile is default ON
   const [isTwoStage, setIsTwoStage] = useState(false)
   const [isRegional, setIsRegional] = useState(false)
   const [hasGateway, setHasGateway] = useState(false)
+  const [hasEmergencyBackstop, setHasEmergencyBackstop] = useState(false)
   const [marginPct, setMarginPct] = useState<number>(20)
 
   const [showSaveDialog, setShowSaveDialog] = useState(false)
@@ -130,6 +132,27 @@ export default function BuilderQuoteBuilder() {
   const includesBattery = productSet === 'Solar and Battery' || productSet === 'Battery Only'
   const includesSolar = productSet === 'Solar and Battery' || productSet === 'Solar Only'
 
+  // Year picker: decimal years (2026, 2026.5, 2027, 2027.5, 2028, 2028.5) when battery is involved
+  // Integer years only (2026, 2027, 2028) for Solar Only since solar STC is per whole year
+  const yearOptions = useMemo(() => {
+    const base = [currentYear, currentYear + 1, currentYear + 2]
+    if (!includesBattery) return base
+    return base.flatMap(y => [y, y + 0.5])
+  }, [currentYear, includesBattery])
+
+  // If product type changes to Solar Only while a .5 year is selected, snap down to the integer year
+  useEffect(() => {
+    if (!includesBattery && !Number.isInteger(year)) {
+      setYear(Math.floor(year))
+    }
+  }, [includesBattery, year])
+
+  // Auto-tick Emergency backstop when state is VIC (user can still untick it)
+  // Only triggers when state CHANGES to VIC, not on every render — so user can untick after
+  useEffect(() => {
+    if (state === 'VIC') setHasEmergencyBackstop(true)
+  }, [state])
+
   const selectedBattery = useMemo(() => batteries.find(b => b.id === batteryId) || null, [batteries, batteryId])
   const selectedInverter = useMemo(() => inverters.find(i => i.id === inverterId) || null, [inverters, inverterId])
   const selectedPv = useMemo(() => pvs.find(p => p.id === pvId) || null, [pvs, pvId])
@@ -182,23 +205,29 @@ export default function BuilderQuoteBuilder() {
 
   const panelCount = includesSolar && selectedPv ? selectedPv.panel_count : 0
   const adderDoubleStorey = isDoubleStorey ? panelCount * config.double_storey_per_panel : 0
+  const adderTile = isTile && includesSolar ? panelCount * config.tile_per_panel : 0
   const adderTwoStage = isTwoStage ? config.two_stage_cost : 0
   const adderRegional = isRegional ? config.regional_cost : 0
   const adderGateway = hasGateway && includesBattery && selectedInverter ? selectedInverter.gateway_cost : 0
+  const adderEmergencyBackstop = hasEmergencyBackstop && includesBattery && selectedInverter ? selectedInverter.emergency_backstop_cost : 0
   const adderVic = state === 'VIC' ? config.vic_ces_cost : 0
-  const totalAdders = adderDoubleStorey + adderTwoStage + adderRegional + adderGateway + adderVic
+  const totalAdders = adderDoubleStorey + adderTile + adderTwoStage + adderRegional + adderGateway + adderEmergencyBackstop + adderVic
 
   const totalCost = componentCost + overheadCost + solarInstall + batteryInstall + totalAdders
   const revenue = totalCost > 0 && marginPct < 100 ? totalCost / (1 - marginPct / 100) : 0
 
   const solarStc = useMemo(() => {
     if (!includesSolar || !selectedPv) return 0
-    const entry = solarStcs.find(s => s.system_size_kw === selectedPv.system_size_kw && s.year === year)
+    // Solar STC is keyed by integer year only (no half-year solar STC values exist).
+    // If user picked 2027.5, use 2027 for the solar lookup.
+    const solarYear = Math.floor(year)
+    const entry = solarStcs.find(s => s.system_size_kw === selectedPv.system_size_kw && s.year === solarYear)
     return entry?.stc_value ?? 0
   }, [includesSolar, selectedPv, solarStcs, year])
 
   const batteryStc = useMemo(() => {
     if (!includesBattery || !selectedBattery) return 0
+    // Battery STC can be a half-year (e.g. 2027.5) so we use the exact year.
     const entry = batteryStcs.find(s => s.battery_kwh === selectedBattery.kwh && s.year === year)
     return entry?.stc_value ?? 0
   }, [includesBattery, selectedBattery, batteryStcs, year])
@@ -249,7 +278,7 @@ export default function BuilderQuoteBuilder() {
       builder_year: year,
       builder_options: {
         state, is_paralleled: isParalleled,
-        double_storey: isDoubleStorey, two_stage: isTwoStage, regional: isRegional, gateway: hasGateway,
+        double_storey: isDoubleStorey, tile: isTile, two_stage: isTwoStage, regional: isRegional, gateway: hasGateway, emergency_backstop: hasEmergencyBackstop,
         selected: {
           battery_id: batteryId, battery_code: selectedBattery?.code,
           inverter_id: inverterId, inverter_code: selectedInverter?.code,
@@ -386,9 +415,11 @@ export default function BuilderQuoteBuilder() {
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">3. Site options</p>
                 <div className="space-y-2">
                   <CheckOption label="Double storey" checked={isDoubleStorey} onChange={setIsDoubleStorey} addCost={adderDoubleStorey} hint={includesSolar ? `${panelCount} panels × ${formatCurrency(config.double_storey_per_panel)}` : 'requires PV'} disabled={!includesSolar} />
+                  <CheckOption label="Tile roof" checked={isTile} onChange={setIsTile} addCost={adderTile} hint={includesSolar ? `${panelCount} panels × ${formatCurrency(config.tile_per_panel)}` : 'requires PV'} disabled={!includesSolar} />
                   <CheckOption label="2-stage install" checked={isTwoStage} onChange={setIsTwoStage} addCost={adderTwoStage} />
                   <CheckOption label="Regional install" checked={isRegional} onChange={setIsRegional} addCost={adderRegional} />
                   <CheckOption label="Gateway required" checked={hasGateway} onChange={setHasGateway} addCost={adderGateway} hint={includesBattery && selectedInverter ? '' : 'requires battery'} disabled={!includesBattery || !selectedInverter} />
+                  <CheckOption label="Emergency backstop" checked={hasEmergencyBackstop} onChange={setHasEmergencyBackstop} addCost={adderEmergencyBackstop} hint={includesBattery && selectedInverter ? (state === 'VIC' ? 'auto-ticked for VIC' : '') : 'requires battery'} disabled={!includesBattery || !selectedInverter} />
                   {state === 'VIC' && config.vic_ces_cost > 0 && (
                     <div className="flex items-center gap-2 pt-1 text-xs text-gray-500 dark:text-gray-400">
                       <span className="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded text-[10px] font-medium">AUTO</span>
