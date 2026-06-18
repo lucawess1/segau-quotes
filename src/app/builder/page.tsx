@@ -132,20 +132,26 @@ export default function BuilderQuoteBuilder() {
   const includesBattery = productSet === 'Solar and Battery' || productSet === 'Battery Only'
   const includesSolar = productSet === 'Solar and Battery' || productSet === 'Solar Only'
 
-  // Year picker: decimal years (2026, 2026.5, 2027, 2027.5, 2028, 2028.5) when battery is involved
-  // Integer years only (2026, 2027, 2028) for Solar Only since solar STC is per whole year
+  // Year picker:
+  // - Solar Only: integer years only (e.g. 2026, 2027, 2028) since solar STC is annual.
+  // - With battery: half-year tranches matter (e.g. 2026.5, 2027, 2027.5, 2028, 2028.5).
+  //   The whole-current-year (e.g. 2026) is excluded for the battery picker because that
+  //   tranche has already passed by mid-year.
   const yearOptions = useMemo(() => {
     const base = [currentYear, currentYear + 1, currentYear + 2]
     if (!includesBattery) return base
-    return base.flatMap(y => [y, y + 0.5])
+    // For battery: include .5 of current year onwards (skip the whole current year)
+    const halves = base.flatMap(y => [y, y + 0.5])
+    return halves.filter(y => y > currentYear)  // drops the bare currentYear
   }, [currentYear, includesBattery])
 
-  // If product type changes to Solar Only while a .5 year is selected, snap down to the integer year
+  // If the currently-selected year is no longer in the options (e.g. switched product type
+  // and the chosen year isn't valid), snap to the first available option.
   useEffect(() => {
-    if (!includesBattery && !Number.isInteger(year)) {
-      setYear(Math.floor(year))
+    if (yearOptions.length > 0 && !yearOptions.includes(year)) {
+      setYear(yearOptions[0])
     }
-  }, [includesBattery, year])
+  }, [yearOptions, year])
 
   // Auto-tick Emergency backstop when state is VIC (user can still untick it)
   // Only triggers when state CHANGES to VIC, not on every render — so user can untick after
