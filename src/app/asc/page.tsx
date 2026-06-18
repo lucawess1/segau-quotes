@@ -683,7 +683,7 @@ export default function QuoteBuilder() {
           <div className="min-w-0 flex items-center gap-2">
             <p className="font-medium text-sm md:text-[15px] truncate">SEG Pricing Builder</p>
             <span className="text-[10px] uppercase tracking-wider font-bold bg-teal-500 dark:bg-teal-600 text-white px-2 py-0.5 rounded">
-              Inbound
+              ASC
             </span>
           </div>
         </div>
