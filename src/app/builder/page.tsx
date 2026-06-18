@@ -233,8 +233,16 @@ export default function BuilderQuoteBuilder() {
   }, [includesBattery, selectedBattery, batteryStcs, year])
 
   const totalStc = solarStc + batteryStc
-  const priceAfter = revenue
-  const priceBefore = revenue + totalStc
+  // PRICING MODEL:
+  // - Builder needs revenue_ex_GST = total_cost / (1 - margin%) to hit their margin target
+  // - GST (10%) is applied to that revenue to get the inc-GST headline price
+  // - STC is subtracted from the inc-GST price as a flat dollar rebate
+  // Formula: customer_RRP = (revenue_ex_GST × 1.1) − total_STC
+  // As STC decreases over the years, customer RRP increases. Builder margin stays the same.
+  const GST_MULTIPLIER = 1.1
+  const revenueIncGst = revenue * GST_MULTIPLIER
+  const priceAfter = Math.max(0, revenueIncGst - totalStc)   // what customer pays (incl GST, STC subtracted as flat $)
+  const priceBefore = revenueIncGst                          // headline before-STC (incl GST)
 
   const availableBrands = useMemo(() => Array.from(new Set(batteries.map(b => b.brand))), [batteries])
   const availableInverters = useMemo(() => {
@@ -453,7 +461,26 @@ export default function BuilderQuoteBuilder() {
                   <p className="text-sm text-gray-700 dark:text-gray-300">Customer price</p>
                   <p className="text-2xl font-medium tabular-nums">{formatCurrency(priceAfter)}</p>
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">After STC, cash · {marginPct}% margin</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Incl. GST · cash · {marginPct}% margin</p>
+
+                <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 text-xs space-y-1">
+                  <div className="flex justify-between text-gray-500 dark:text-gray-400">
+                    <span>Before STC ({year})</span>
+                    <span className="tabular-nums">{formatCurrency(priceBefore)}</span>
+                  </div>
+                  {includesSolar && (
+                    <div className="flex justify-between text-gray-500 dark:text-gray-400">
+                      <span>Solar STC ({Math.floor(year)})</span>
+                      <span className="tabular-nums text-green-700 dark:text-green-400">−{formatCurrency(solarStc)}</span>
+                    </div>
+                  )}
+                  {includesBattery && (
+                    <div className="flex justify-between text-gray-500 dark:text-gray-400">
+                      <span>Battery STC ({year})</span>
+                      <span className="tabular-nums text-green-700 dark:text-green-400">−{formatCurrency(batteryStc)}</span>
+                    </div>
+                  )}
+                </div>
 
                 {totalStc === 0 && (includesSolar || includesBattery) && (
                   <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-400 italic">No STC values configured for this configuration in {year}.</p>
@@ -573,7 +600,7 @@ export default function BuilderQuoteBuilder() {
         <div className="flex-1 min-w-0">
           {canShowPrice ? (
             <>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-tight">Customer price · {marginPct}% margin</p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-tight">Customer price (incl. GST) · {marginPct}% margin</p>
               <p className="text-lg font-medium leading-tight tabular-nums">{formatCurrency(priceAfter)}</p>
             </>
           ) : (
