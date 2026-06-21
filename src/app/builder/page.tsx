@@ -15,12 +15,12 @@ type Profile = {
 }
 
 type Battery = { id: number; code: string; brand: string; kwh: number; model: string | null; cost: number; active: boolean }
-type Inverter = { id: number; code: string; brand: string; phase: string; model: string | null; cost: number; gateway_cost: number; emergency_backstop_cost: number; active: boolean }
+type Inverter = { id: number; code: string; brand: string; phase: string; model: string | null; cost: number; gateway_cost: number; emergency_backstop_cost: number; paralleled: boolean; scope: 'solar_only' | 'battery'; active: boolean }
 type PV = { id: number; code: string; panel_model: string; panel_count: number; system_size_kw: number; cost: number; active: boolean }
 type SolarStc = { system_size_kw: number; year: number; stc_value: number }
 type BatteryStc = { battery_kwh: number; year: number; stc_value: number }
 type BuilderCosts = { product_set: string; product_overhead: number; other_overhead: number; solar_base_install: number; solar_install_per_panel: number; battery_base_install: number; battery_install_per_kwh_over: number }
-type BuilderConfig = { margin_min_pct: number; margin_max_pct: number; margin_default_pct: number; double_storey_per_panel: number; tile_per_panel: number; two_stage_cost: number; vic_ces_cost: number; regional_cost: number }
+type BuilderConfig = { margin_min_pct: number; margin_max_pct: number; margin_default_pct: number; double_storey_per_panel: number; tile_per_panel: number; two_stage_cost: number; vic_ces_cost: number; regional_cost: number; hcbf_cost: number; hcbf_threshold: number }
 type SavedQuote = { id: string; quote_number: string; customer_name: string | null; user_id: string | null; created_at: string | null; total_price: number | null; builder_margin_pct: number | null }
 
 const AU_STATES = ['VIC', 'NSW', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT'] as const
@@ -51,6 +51,7 @@ export default function BuilderQuoteBuilder() {
     margin_min_pct: 15, margin_max_pct: 35, margin_default_pct: 20,
     double_storey_per_panel: 50, tile_per_panel: 50,
     two_stage_cost: 250, vic_ces_cost: 250, regional_cost: 500,
+    hcbf_cost: 370, hcbf_threshold: 20000,
   })
 
   const currentYear = new Date().getFullYear()
@@ -61,7 +62,6 @@ export default function BuilderQuoteBuilder() {
   const [pvId, setPvId] = useState<number | null>(null)
   const [state, setState] = useState<AuState>('VIC')
   const [year, setYear] = useState<number>(currentYear)
-  const [isParalleled, setIsParalleled] = useState(false)
   const [isDoubleStorey, setIsDoubleStorey] = useState(false)
   const [isTile, setIsTile] = useState(true)  // tile is default ON
   const [isTwoStage, setIsTwoStage] = useState(false)
@@ -131,6 +131,9 @@ export default function BuilderQuoteBuilder() {
 
   const includesBattery = productSet === 'Solar and Battery' || productSet === 'Battery Only'
   const includesSolar = productSet === 'Solar and Battery' || productSet === 'Solar Only'
+  // Inverter is required for ALL product types (solar-only inverters for Solar Only,
+  // battery/hybrid inverters for anything with a battery).
+  const needsInverter = true
 
   // Year picker:
   // - Solar Only: integer years only (e.g. 2026, 2027, 2028) since solar STC is annual.
@@ -168,26 +171,18 @@ export default function BuilderQuoteBuilder() {
     if (!includesBattery) setBatteryId(null)
   }, [includesBattery, batteries, selectedBattery])
 
-  useEffect(() => {
-    if (includesBattery && inverters.length > 0 && !selectedInverter) setInverterId(inverters[0].id)
-    if (!includesBattery) setInverterId(null)
-  }, [includesBattery, inverters, selectedInverter])
+  // Default inverter selection handled by availableInverters effect below
+  // (which also rescues invalid selections after filter changes)
 
   useEffect(() => {
     if (includesSolar && pvs.length > 0 && !selectedPv) setPvId(pvs[0].id)
     if (!includesSolar) setPvId(null)
   }, [includesSolar, pvs, selectedPv])
 
-  // Battery > 30 kWh must be paralleled
-  useEffect(() => {
-    if (selectedBattery && selectedBattery.kwh > 30) setIsParalleled(true)
-  }, [selectedBattery])
-
-  const isParalleledLocked = selectedBattery ? selectedBattery.kwh > 30 : false
   const productCosts: BuilderCosts | null = costsByProductSet.get(productSet) ?? null
 
   const batteryCost = includesBattery && selectedBattery ? selectedBattery.cost : 0
-  const inverterCost = includesBattery && selectedInverter ? selectedInverter.cost : 0
+  const inverterCost = selectedInverter ? selectedInverter.cost : 0
   const pvCost = includesSolar && selectedPv ? selectedPv.cost : 0
   const componentCost = batteryCost + inverterCost + pvCost
 
@@ -219,13 +214,11 @@ export default function BuilderQuoteBuilder() {
   const adderVic = state === 'VIC' ? config.vic_ces_cost : 0
   const totalAdders = adderDoubleStorey + adderTile + adderTwoStage + adderRegional + adderGateway + adderEmergencyBackstop + adderVic
 
-  const totalCost = componentCost + overheadCost + solarInstall + batteryInstall + totalAdders
-  const revenue = totalCost > 0 && marginPct < 100 ? totalCost / (1 - marginPct / 100) : 0
+  // Base cost before HCBF check
+  const baseTotalCost = componentCost + overheadCost + solarInstall + batteryInstall + totalAdders
 
   const solarStc = useMemo(() => {
     if (!includesSolar || !selectedPv) return 0
-    // Solar STC is keyed by integer year only (no half-year solar STC values exist).
-    // If user picked 2027.5, use 2027 for the solar lookup.
     const solarYear = Math.floor(year)
     const entry = solarStcs.find(s => s.system_size_kw === selectedPv.system_size_kw && s.year === solarYear)
     return entry?.stc_value ?? 0
@@ -233,35 +226,57 @@ export default function BuilderQuoteBuilder() {
 
   const batteryStc = useMemo(() => {
     if (!includesBattery || !selectedBattery) return 0
-    // Battery STC can be a half-year (e.g. 2027.5) so we use the exact year.
     const entry = batteryStcs.find(s => s.battery_kwh === selectedBattery.kwh && s.year === year)
     return entry?.stc_value ?? 0
   }, [includesBattery, selectedBattery, batteryStcs, year])
 
   const totalStc = solarStc + batteryStc
-  // PRICING MODEL:
-  // - Builder needs revenue_ex_GST = total_cost / (1 - margin%) to hit their margin target
-  // - GST (10%) is applied to that revenue to get the inc-GST headline price
-  // - STC is subtracted from the inc-GST price as a flat dollar rebate
-  // Formula: customer_RRP = (revenue_ex_GST × 1.1) − total_STC
-  // As STC decreases over the years, customer RRP increases. Builder margin stays the same.
   const GST_MULTIPLIER = 1.1
+
+  // HCBF insurance: $370 added to cost base when customer RRP (before HCBF) would be >= $20,000.
+  // Single-pass: calc the would-be price without HCBF, check the threshold, add HCBF if so.
+  // Math: priceBefore = (cost / (1 - margin)) * 1.1; priceAfter = priceBefore - STC
+  const pricePreHcbfBefore = baseTotalCost > 0 && marginPct < 100 ? (baseTotalCost / (1 - marginPct / 100)) * GST_MULTIPLIER : 0
+  const pricePreHcbfAfter = Math.max(0, pricePreHcbfBefore - totalStc)
+  const isHcbfRequired = pricePreHcbfAfter >= config.hcbf_threshold
+  const hcbfCost = isHcbfRequired ? config.hcbf_cost : 0
+
+  // Final cost includes HCBF if applicable; revenue and prices computed from this
+  const totalCost = baseTotalCost + hcbfCost
+  const revenue = totalCost > 0 && marginPct < 100 ? totalCost / (1 - marginPct / 100) : 0
   const revenueIncGst = revenue * GST_MULTIPLIER
-  const priceAfter = Math.max(0, revenueIncGst - totalStc)   // what customer pays (incl GST, STC subtracted as flat $)
-  const priceBefore = revenueIncGst                          // headline before-STC (incl GST)
+  const priceAfter = Math.max(0, revenueIncGst - totalStc)
+  const priceBefore = revenueIncGst
 
   const availableBrands = useMemo(() => Array.from(new Set(batteries.map(b => b.brand))), [batteries])
+
+  // Available inverters depends on:
+  // - scope: 'solar_only' for Solar Only; 'battery' otherwise
+  // - if battery > 30 kWh: must be paralleled inverter
+  // - if multiple battery brands exist: match the selected battery's brand
   const availableInverters = useMemo(() => {
-    if (!includesBattery || !selectedBattery || availableBrands.length <= 1) return inverters
-    return inverters.filter(i => i.brand === selectedBattery.brand)
+    const requiredScope = includesBattery ? 'battery' : 'solar_only'
+    let list = inverters.filter(i => i.scope === requiredScope)
+    if (includesBattery && selectedBattery) {
+      if (selectedBattery.kwh > 30) list = list.filter(i => i.paralleled)
+      if (availableBrands.length > 1) list = list.filter(i => i.brand === selectedBattery.brand)
+    }
+    return list
   }, [includesBattery, selectedBattery, inverters, availableBrands])
 
+  // Default-select first available inverter; rescue invalid selection on filter change
   useEffect(() => {
-    if (includesBattery && availableInverters.length > 0 && selectedInverter &&
-        !availableInverters.some(i => i.id === selectedInverter.id)) {
+    if (availableInverters.length === 0) {
+      setInverterId(null)
+      return
+    }
+    if (!selectedInverter || !availableInverters.some(i => i.id === selectedInverter.id)) {
       setInverterId(availableInverters[0].id)
     }
-  }, [includesBattery, availableInverters, selectedInverter])
+  }, [availableInverters, selectedInverter])
+
+  // Paralleled is now DERIVED from the selected inverter, not user-controlled
+  const isParalleled = selectedInverter?.paralleled ?? false
 
   const saveQuote = async () => {
     if (!profile) return
@@ -277,7 +292,7 @@ export default function BuilderQuoteBuilder() {
       brand: includesBattery && selectedBattery ? selectedBattery.brand : null,
       battery_kwh: includesBattery && selectedBattery ? selectedBattery.kwh : null,
       panel_count: includesSolar && selectedPv ? selectedPv.panel_count : null,
-      inverter_phase: includesBattery && selectedInverter ? selectedInverter.phase : null,
+      inverter_phase: selectedInverter ? selectedInverter.phase : null,
       inverter_paralleled: includesBattery ? isParalleled : null,
       territory: isRegional ? 'Regional' : 'Metro',
       zone: 4,
@@ -291,7 +306,7 @@ export default function BuilderQuoteBuilder() {
       builder_margin_pct: marginPct,
       builder_year: year,
       builder_options: {
-        state, is_paralleled: isParalleled,
+        state, is_paralleled: isParalleled, hcbf_required: isHcbfRequired,
         double_storey: isDoubleStorey, tile: isTile, two_stage: isTwoStage, regional: isRegional, gateway: hasGateway, emergency_backstop: hasEmergencyBackstop,
         selected: {
           battery_id: batteryId, battery_code: selectedBattery?.code,
@@ -301,7 +316,8 @@ export default function BuilderQuoteBuilder() {
         breakdown: {
           components: componentCost, overhead: overheadCost,
           solar_install: solarInstall, battery_install: batteryInstall,
-          adders: totalAdders, total_cost: totalCost, revenue: revenue,
+          adders: totalAdders, hcbf: hcbfCost,
+          total_cost: totalCost, revenue: revenue,
           solar_stc: solarStc, battery_stc: batteryStc,
         },
       },
@@ -325,7 +341,7 @@ export default function BuilderQuoteBuilder() {
     return <div className="min-h-screen flex items-center justify-center text-sm text-gray-500 dark:text-gray-400">Loading…</div>
   }
 
-  const canShowPrice = (includesBattery ? !!selectedBattery && !!selectedInverter : true) && (includesSolar ? !!selectedPv : true)
+  const canShowPrice = !!selectedInverter && (includesBattery ? !!selectedBattery : true) && (includesSolar ? !!selectedPv : true)
 
   return (
     <div className="min-h-screen bg-indigo-50/30 dark:bg-indigo-950/10">
@@ -379,14 +395,9 @@ export default function BuilderQuoteBuilder() {
               </div>
 
               {includesBattery && (
-                <>
-                  <ComponentSelector label="Battery" value={batteryId} onChange={setBatteryId}
-                    options={batteries.map(b => ({ id: b.id, label: `${b.brand} ${b.kwh} kWh — ${b.model || b.code}`, cost: b.cost }))}
-                    emptyHint="No batteries configured" />
-                  <ComponentSelector label="Inverter" value={inverterId} onChange={setInverterId}
-                    options={availableInverters.map(i => ({ id: i.id, label: `${i.code} (${i.phase})`, cost: i.cost }))}
-                    emptyHint="No inverters configured" />
-                </>
+                <ComponentSelector label="Battery" value={batteryId} onChange={setBatteryId}
+                  options={batteries.map(b => ({ id: b.id, label: `${b.brand} ${b.kwh} kWh — ${b.model || b.code}`, cost: b.cost }))}
+                  emptyHint="No batteries configured" />
               )}
 
               {includesSolar && (
@@ -395,15 +406,24 @@ export default function BuilderQuoteBuilder() {
                   emptyHint="No PV options configured" />
               )}
 
-              {includesBattery && selectedBattery && (
-                <div className="pt-2">
-                  <label className={`flex items-center gap-2 ${isParalleledLocked ? 'opacity-60' : 'cursor-pointer'}`}>
-                    <input type="checkbox" checked={isParalleled} onChange={e => setIsParalleled(e.target.checked)} disabled={isParalleledLocked} className="w-4 h-4" />
-                    <span className="text-sm flex-1">
-                      Inverter paralleled (×2)
-                      {isParalleledLocked && (<span className="text-xs text-gray-500 dark:text-gray-400 ml-1.5">(required for &gt;30 kWh)</span>)}
-                    </span>
-                  </label>
+              <ComponentSelector
+                label="Inverter"
+                value={inverterId}
+                onChange={setInverterId}
+                options={availableInverters.map(i => ({
+                  id: i.id,
+                  label: `${i.code} (${i.phase}${i.paralleled ? ', paralleled' : ''})`,
+                  cost: i.cost,
+                }))}
+                emptyHint={includesBattery && selectedBattery && selectedBattery.kwh > 30 ? "No paralleled inverters configured" : "No inverters configured"}
+              />
+
+              {includesBattery && selectedBattery && isParalleled && (
+                <div className="pt-1 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                  <span className="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded text-[10px] font-medium">PARALLELED</span>
+                  <span>
+                    Inverter is paralleled — battery install ×2{selectedBattery.kwh > 30 ? ' (required for >30 kWh)' : ''}
+                  </span>
                 </div>
               )}
 
@@ -498,8 +518,8 @@ export default function BuilderQuoteBuilder() {
                     {includesBattery && selectedBattery && (
                       <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Battery</span><span>{selectedBattery.brand} {selectedBattery.kwh} kWh</span></div>
                     )}
-                    {includesBattery && selectedInverter && (
-                      <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Inverter</span><span>{selectedInverter.code} ({selectedInverter.phase})</span></div>
+                    {selectedInverter && (
+                      <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Inverter</span><span>{selectedInverter.code} ({selectedInverter.phase}{selectedInverter.paralleled ? ', paralleled' : ''})</span></div>
                     )}
                     {includesSolar && selectedPv && (
                       <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">PV</span><span>{selectedPv.system_size_kw} kW · {selectedPv.panel_count} panels</span></div>
@@ -521,6 +541,9 @@ export default function BuilderQuoteBuilder() {
                       )}
                       {totalAdders > 0 && (
                         <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Site adders</span><span className="tabular-nums">{formatCurrency(totalAdders)}</span></div>
+                      )}
+                      {hcbfCost > 0 && (
+                        <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">HCBF insurance (≥{formatCurrency(config.hcbf_threshold)})</span><span className="tabular-nums">{formatCurrency(hcbfCost)}</span></div>
                       )}
                       <div className="flex justify-between border-t border-gray-100 dark:border-gray-800 pt-1 mt-1"><span className="text-gray-700 dark:text-gray-300">Total cost</span><span className="tabular-nums font-medium">{formatCurrency(totalCost)}</span></div>
                       <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Margin ({marginPct}%)</span><span className="tabular-nums text-indigo-700 dark:text-indigo-400">+{formatCurrency(revenue - totalCost)}</span></div>
