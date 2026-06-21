@@ -164,6 +164,8 @@ export default function BuilderQuoteBuilder() {
 
   const selectedBattery = useMemo(() => batteries.find(b => b.id === batteryId) || null, [batteries, batteryId])
   const selectedInverter = useMemo(() => inverters.find(i => i.id === inverterId) || null, [inverters, inverterId])
+  // Paralleled is derived from the selected inverter's `paralleled` flag (not user-controlled)
+  const isParalleled = selectedInverter?.paralleled ?? false
   const selectedPv = useMemo(() => pvs.find(p => p.id === pvId) || null, [pvs, pvId])
 
   useEffect(() => {
@@ -274,9 +276,6 @@ export default function BuilderQuoteBuilder() {
       setInverterId(availableInverters[0].id)
     }
   }, [availableInverters, selectedInverter])
-
-  // Paralleled is now DERIVED from the selected inverter, not user-controlled
-  const isParalleled = selectedInverter?.paralleled ?? false
 
   const saveQuote = async () => {
     if (!profile) return
