@@ -17,8 +17,8 @@ type Profile = {
 type Battery = { id: number; code: string; brand: string; kwh: number; model: string | null; cost: number; active: boolean }
 type Inverter = { id: number; code: string; brand: string; phase: string; model: string | null; cost: number; gateway_cost: number; emergency_backstop_cost: number; paralleled: boolean; scope: 'solar_only' | 'battery'; active: boolean }
 type PV = { id: number; code: string; panel_model: string; panel_count: number; system_size_kw: number; cost: number; active: boolean }
-type SolarStc = { system_size_kw: number; year: number; stc_value: number }
-type BatteryStc = { battery_kwh: number; year: number; stc_value: number }
+type SolarStc = { system_size_kw: number; year: number; stc_value: number; excess_revenue: number }
+type BatteryStc = { battery_kwh: number; year: number; stc_value: number; excess_revenue: number }
 type BuilderCosts = { product_set: string; product_overhead: number; other_overhead: number; solar_base_install: number; solar_install_per_panel: number; battery_base_install: number; battery_install_per_kwh_over: number }
 type BuilderConfig = { margin_min_pct: number; margin_max_pct: number; margin_default_pct: number; double_storey_per_panel: number; tile_per_panel: number; two_stage_cost: number; vic_ces_cost: number; regional_cost: number; hcbf_cost: number; hcbf_threshold: number }
 type SavedQuote = { id: string; quote_number: string; customer_name: string | null; user_id: string | null; created_at: string | null; total_price: number | null; builder_margin_pct: number | null }
@@ -219,27 +219,37 @@ export default function BuilderQuoteBuilder() {
   // Base cost before HCBF check
   const baseTotalCost = componentCost + overheadCost + solarInstall + batteryInstall + totalAdders
 
-  const solarStc = useMemo(() => {
-    if (!includesSolar || !selectedPv) return 0
+  // STC and excess revenue lookups — both come off the customer's GST-inc price as flat rebates
+  const solarStcEntry = useMemo(() => {
+    if (!includesSolar || !selectedPv) return { stc_value: 0, excess_revenue: 0 }
+    // Solar uses integer year (no half-year solar STC)
     const solarYear = Math.floor(year)
     const entry = solarStcs.find(s => s.system_size_kw === selectedPv.system_size_kw && s.year === solarYear)
-    return entry?.stc_value ?? 0
+    return { stc_value: entry?.stc_value ?? 0, excess_revenue: entry?.excess_revenue ?? 0 }
   }, [includesSolar, selectedPv, solarStcs, year])
 
-  const batteryStc = useMemo(() => {
-    if (!includesBattery || !selectedBattery) return 0
+  const batteryStcEntry = useMemo(() => {
+    if (!includesBattery || !selectedBattery) return { stc_value: 0, excess_revenue: 0 }
+    // Battery STC can be a half-year (e.g. 2027.5) — exact match
     const entry = batteryStcs.find(s => s.battery_kwh === selectedBattery.kwh && s.year === year)
-    return entry?.stc_value ?? 0
+    return { stc_value: entry?.stc_value ?? 0, excess_revenue: entry?.excess_revenue ?? 0 }
   }, [includesBattery, selectedBattery, batteryStcs, year])
 
+  const solarStc = solarStcEntry.stc_value
+  const batteryStc = batteryStcEntry.stc_value
+  const solarExcessRevenue = solarStcEntry.excess_revenue
+  const batteryExcessRevenue = batteryStcEntry.excess_revenue
+
   const totalStc = solarStc + batteryStc
+  const totalExcessRevenue = solarExcessRevenue + batteryExcessRevenue
+  const totalCustomerDeductions = totalStc + totalExcessRevenue
   const GST_MULTIPLIER = 1.1
 
   // HCBF insurance: $370 added to cost base when customer RRP (before HCBF) would be >= $20,000.
   // Single-pass: calc the would-be price without HCBF, check the threshold, add HCBF if so.
-  // Math: priceBefore = (cost / (1 - margin)) * 1.1; priceAfter = priceBefore - STC
+  // HCBF threshold check uses the full customer-deductions amount (STC + excess revenue)
   const pricePreHcbfBefore = baseTotalCost > 0 && marginPct < 100 ? (baseTotalCost / (1 - marginPct / 100)) * GST_MULTIPLIER : 0
-  const pricePreHcbfAfter = Math.max(0, pricePreHcbfBefore - totalStc)
+  const pricePreHcbfAfter = Math.max(0, pricePreHcbfBefore - totalCustomerDeductions)
   const isHcbfRequired = pricePreHcbfAfter >= config.hcbf_threshold
   const hcbfCost = isHcbfRequired ? config.hcbf_cost : 0
 
@@ -247,7 +257,7 @@ export default function BuilderQuoteBuilder() {
   const totalCost = baseTotalCost + hcbfCost
   const revenue = totalCost > 0 && marginPct < 100 ? totalCost / (1 - marginPct / 100) : 0
   const revenueIncGst = revenue * GST_MULTIPLIER
-  const priceAfter = Math.max(0, revenueIncGst - totalStc)
+  const priceAfter = Math.max(0, revenueIncGst - totalCustomerDeductions)
   const priceBefore = revenueIncGst
 
   const availableBrands = useMemo(() => Array.from(new Set(batteries.map(b => b.brand))), [batteries])
@@ -318,6 +328,8 @@ export default function BuilderQuoteBuilder() {
           adders: totalAdders, hcbf: hcbfCost,
           total_cost: totalCost, revenue: revenue,
           solar_stc: solarStc, battery_stc: batteryStc,
+          solar_excess_revenue: solarExcessRevenue, battery_excess_revenue: batteryExcessRevenue,
+          total_customer_deductions: totalCustomerDeductions,
         },
       },
     }).select('quote_number').single()
@@ -503,6 +515,12 @@ export default function BuilderQuoteBuilder() {
                     <div className="flex justify-between text-gray-500 dark:text-gray-400">
                       <span>Battery STC ({year})</span>
                       <span className="tabular-nums text-green-700 dark:text-green-400">−{formatCurrency(batteryStc)}</span>
+                    </div>
+                  )}
+                  {(solarExcessRevenue > 0 || batteryExcessRevenue > 0) && (
+                    <div className="flex justify-between text-gray-500 dark:text-gray-400">
+                      <span>Excess revenue</span>
+                      <span className="tabular-nums text-green-700 dark:text-green-400">−{formatCurrency(totalExcessRevenue)}</span>
                     </div>
                   )}
                 </div>
