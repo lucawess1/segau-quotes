@@ -62,6 +62,7 @@ export default function BuilderQuoteBuilder() {
   const [pvId, setPvId] = useState<number | null>(null)
   const [state, setState] = useState<AuState>('VIC')
   const [year, setYear] = useState<number>(currentYear)
+  const [phase, setPhase] = useState<'1PH' | '3PH'>('1PH')
   const [isDoubleStorey, setIsDoubleStorey] = useState(false)
   const [isTile, setIsTile] = useState(true)  // tile is default ON
   const [isTwoStage, setIsTwoStage] = useState(false)
@@ -212,7 +213,7 @@ export default function BuilderQuoteBuilder() {
   const adderTwoStage = isTwoStage ? config.two_stage_cost : 0
   const adderRegional = isRegional ? config.regional_cost : 0
   const adderGateway = hasGateway && includesBattery && selectedInverter ? selectedInverter.gateway_cost : 0
-  const adderEmergencyBackstop = hasEmergencyBackstop && includesBattery && selectedInverter ? selectedInverter.emergency_backstop_cost : 0
+  const adderEmergencyBackstop = hasEmergencyBackstop && selectedInverter ? selectedInverter.emergency_backstop_cost : 0
   const adderVic = state === 'VIC' ? config.vic_ces_cost : 0
   const totalAdders = adderDoubleStorey + adderTile + adderTwoStage + adderRegional + adderGateway + adderEmergencyBackstop + adderVic
 
@@ -264,17 +265,18 @@ export default function BuilderQuoteBuilder() {
 
   // Available inverters depends on:
   // - scope: 'solar_only' for Solar Only; 'battery' otherwise
+  // - phase: must match the selected phase (1PH or 3PH)
   // - if battery > 30 kWh: must be paralleled inverter
   // - if multiple battery brands exist: match the selected battery's brand
   const availableInverters = useMemo(() => {
     const requiredScope = includesBattery ? 'battery' : 'solar_only'
-    let list = inverters.filter(i => i.scope === requiredScope)
+    let list = inverters.filter(i => i.scope === requiredScope && i.phase === phase)
     if (includesBattery && selectedBattery) {
       if (selectedBattery.kwh > 30) list = list.filter(i => i.paralleled)
       if (availableBrands.length > 1) list = list.filter(i => i.brand === selectedBattery.brand)
     }
     return list
-  }, [includesBattery, selectedBattery, inverters, availableBrands])
+  }, [includesBattery, selectedBattery, inverters, availableBrands, phase])
 
   // Default-select first available inverter; rescue invalid selection on filter change
   useEffect(() => {
@@ -417,6 +419,25 @@ export default function BuilderQuoteBuilder() {
                   emptyHint="No PV options configured" />
               )}
 
+              <div>
+                <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Phase</label>
+                <div className="grid grid-cols-2 gap-1">
+                  {(['1PH', '3PH'] as const).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setPhase(p)}
+                      className={`px-2 py-2 text-sm border rounded-md font-medium ${
+                        phase === p
+                          ? 'bg-indigo-600 dark:bg-indigo-500 text-white border-indigo-600 dark:border-indigo-500'
+                          : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <ComponentSelector
                 label="Inverter"
                 value={inverterId}
@@ -464,7 +485,7 @@ export default function BuilderQuoteBuilder() {
                   <CheckOption label="2-stage install" checked={isTwoStage} onChange={setIsTwoStage} addCost={adderTwoStage} />
                   <CheckOption label="Regional install" checked={isRegional} onChange={setIsRegional} addCost={adderRegional} />
                   <CheckOption label="Gateway required" checked={hasGateway} onChange={setHasGateway} addCost={adderGateway} hint={includesBattery && selectedInverter ? '' : 'requires battery'} disabled={!includesBattery || !selectedInverter} />
-                  <CheckOption label="Emergency backstop" checked={hasEmergencyBackstop} onChange={setHasEmergencyBackstop} addCost={adderEmergencyBackstop} hint={includesBattery && selectedInverter ? (state === 'VIC' ? 'auto-ticked for VIC' : '') : 'requires battery'} disabled={!includesBattery || !selectedInverter} />
+                  <CheckOption label="Emergency backstop" checked={hasEmergencyBackstop} onChange={setHasEmergencyBackstop} addCost={adderEmergencyBackstop} hint={selectedInverter ? (state === 'VIC' ? 'auto-ticked for VIC' : '') : 'requires inverter'} disabled={!selectedInverter} />
                   {state === 'VIC' && config.vic_ces_cost > 0 && (
                     <div className="flex items-center gap-2 pt-1 text-xs text-gray-500 dark:text-gray-400">
                       <span className="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded text-[10px] font-medium">AUTO</span>
