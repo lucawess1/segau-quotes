@@ -674,10 +674,10 @@ function ComponentSelector({ label, value, onChange, options, emptyHint }: {
       <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{label}</label>
       <div className="flex items-center gap-2">
         <select value={value ?? ''} onChange={e => onChange(Number(e.target.value))} disabled={options.length === 0}
-          className="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900 focus:outline-none focus:border-gray-400 dark:focus:border-gray-500">
+          className="flex-1 min-w-0 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900 focus:outline-none focus:border-gray-400 dark:focus:border-gray-500">
           {options.length === 0 ? <option>{emptyHint}</option> : options.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
         </select>
-        <span className="text-xs text-gray-500 dark:text-gray-400 min-w-[70px] text-right tabular-nums">
+        <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0 text-right tabular-nums w-[70px]">
           {(() => {
             const selected = options.find(o => o.id === value)
             return selected ? formatCurrency(selected.cost) : '—'
