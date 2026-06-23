@@ -20,7 +20,7 @@ type PV = { id: number; code: string; panel_model: string; panel_count: number; 
 type SolarStc = { system_size_kw: number; year: number; stc_value: number; excess_revenue: number }
 type BatteryStc = { battery_kwh: number; year: number; stc_value: number; excess_revenue: number }
 type BuilderCosts = { product_set: string; product_overhead: number; other_overhead: number; solar_base_install: number; solar_install_per_panel: number; battery_base_install: number; battery_install_per_kwh_over: number }
-type BuilderConfig = { margin_min_pct: number; margin_max_pct: number; margin_default_pct: number; double_storey_per_panel: number; tile_per_panel: number; two_stage_cost: number; vic_ces_cost: number; regional_cost: number; hcbf_cost: number; hcbf_threshold: number }
+type BuilderConfig = { margin_min_pct: number; margin_max_pct: number; margin_default_pct: number; double_storey_per_panel: number; tile_per_panel: number; two_stage_cost: number; vic_ces_cost: number; regional_cost: number; hcbf_cost: number; hcbf_threshold: number; install_inflation_pct: number; install_inflation_base_year: number }
 type SavedQuote = { id: string; quote_number: string; customer_name: string | null; user_id: string | null; created_at: string | null; total_price: number | null; builder_margin_pct: number | null }
 
 const AU_STATES = ['VIC', 'NSW', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT'] as const
@@ -52,6 +52,7 @@ export default function BuilderQuoteBuilder() {
     double_storey_per_panel: 50, tile_per_panel: 50,
     two_stage_cost: 250, vic_ces_cost: 250, regional_cost: 500,
     hcbf_cost: 370, hcbf_threshold: 20000,
+    install_inflation_pct: 4, install_inflation_base_year: 2026,
   })
 
   const currentYear = new Date().getFullYear()
@@ -194,18 +195,29 @@ export default function BuilderQuoteBuilder() {
   const parallelMultiplier = isParalleled ? 2 : 1
   const batteryKwhThreshold = BATTERY_KWH_THRESHOLD_BASE * parallelMultiplier
 
+  // Inflation factor for install costs.
+  // Whole-year inflation only: 2026 and 2026.5 use base, 2027 and 2027.5 use 1 year of inflation, etc.
+  // factor = (1 + rate/100) ^ max(0, floor(year) - baseYear)
+  const inflationFactor = useMemo(() => {
+    const yearsFromBase = Math.max(0, Math.floor(year) - config.install_inflation_base_year)
+    if (yearsFromBase === 0 || config.install_inflation_pct === 0) return 1
+    return Math.pow(1 + config.install_inflation_pct / 100, yearsFromBase)
+  }, [year, config.install_inflation_pct, config.install_inflation_base_year])
+
   const solarInstall = useMemo(() => {
     if (!includesSolar || !selectedPv || !productCosts) return 0
-    return productCosts.solar_base_install + selectedPv.panel_count * productCosts.solar_install_per_panel
-  }, [includesSolar, selectedPv, productCosts])
+    const raw = productCosts.solar_base_install + selectedPv.panel_count * productCosts.solar_install_per_panel
+    return raw * inflationFactor
+  }, [includesSolar, selectedPv, productCosts, inflationFactor])
 
   const batteryInstall = useMemo(() => {
     if (!includesBattery || !selectedBattery || !productCosts) return 0
     const base = productCosts.battery_base_install * parallelMultiplier
     const overThreshold = Math.max(0, selectedBattery.kwh - batteryKwhThreshold)
     const variable = overThreshold * productCosts.battery_install_per_kwh_over
-    return base + variable
-  }, [includesBattery, selectedBattery, productCosts, parallelMultiplier, batteryKwhThreshold])
+    const raw = base + variable
+    return raw * inflationFactor
+  }, [includesBattery, selectedBattery, productCosts, parallelMultiplier, batteryKwhThreshold, inflationFactor])
 
   const panelCount = includesSolar && selectedPv ? selectedPv.panel_count : 0
   const adderDoubleStorey = isDoubleStorey ? panelCount * config.double_storey_per_panel : 0
@@ -327,6 +339,7 @@ export default function BuilderQuoteBuilder() {
         breakdown: {
           components: componentCost, overhead: overheadCost,
           solar_install: solarInstall, battery_install: batteryInstall,
+          inflation_factor: inflationFactor, inflation_pct: config.install_inflation_pct,
           adders: totalAdders, hcbf: hcbfCost,
           total_cost: totalCost, revenue: revenue,
           solar_stc: solarStc, battery_stc: batteryStc,
@@ -572,10 +585,10 @@ export default function BuilderQuoteBuilder() {
                       <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Components</span><span className="tabular-nums">{formatCurrency(componentCost)}</span></div>
                       <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Overhead</span><span className="tabular-nums">{formatCurrency(overheadCost)}</span></div>
                       {includesSolar && solarInstall > 0 && (
-                        <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Solar install</span><span className="tabular-nums">{formatCurrency(solarInstall)}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Solar install{inflationFactor > 1 ? ` (×${inflationFactor.toFixed(4)})` : ''}</span><span className="tabular-nums">{formatCurrency(solarInstall)}</span></div>
                       )}
                       {includesBattery && batteryInstall > 0 && (
-                        <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Battery install{isParalleled ? ' (×2)' : ''}</span><span className="tabular-nums">{formatCurrency(batteryInstall)}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Battery install{isParalleled ? ' (×2)' : ''}{inflationFactor > 1 ? ` (infl ×${inflationFactor.toFixed(4)})` : ''}</span><span className="tabular-nums">{formatCurrency(batteryInstall)}</span></div>
                       )}
                       {totalAdders > 0 && (
                         <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Site adders</span><span className="tabular-nums">{formatCurrency(totalAdders)}</span></div>
