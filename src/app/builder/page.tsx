@@ -84,6 +84,10 @@ export default function BuilderQuoteBuilder() {
   const [savedConfirmation, setSavedConfirmation] = useState<string | null>(null)
   const [recentQuotes, setRecentQuotes] = useState<BuilderQuoteRecord[]>([])
 
+  // Price is hidden until the user clicks "Reveal price & save".
+  // Any subsequent edit hides it again, forcing a fresh save (= new row + new audit entry).
+  const [priceRevealed, setPriceRevealed] = useState(false)
+
   useEffect(() => {
     loadProfile()
     loadConfig()
@@ -148,6 +152,18 @@ export default function BuilderQuoteBuilder() {
   }, [builderChoice, builderOther])
 
   const isLeadValid = resolvedBuilderName.length > 0 && siteAddress.trim().length > 0
+
+  // Whenever the user changes any pricing input, hide the price again — they must re-reveal (and save).
+  // This includes returning to the lead form via Edit (stage change) and re-Continuing.
+  useEffect(() => {
+    setPriceRevealed(false)
+  }, [
+    stage,
+    productSet, batteryId, inverterId, pvId, phase,
+    state, year, marginPct,
+    isDoubleStorey, isTile, isTwoStage, isRegional, hasGateway, hasEmergencyBackstop,
+    resolvedBuilderName, siteAddress,
+  ])
 
   const includesBattery = productSet === 'Solar and Battery' || productSet === 'Battery Only'
   const includesSolar = productSet === 'Solar and Battery' || productSet === 'Solar Only'
@@ -372,6 +388,7 @@ export default function BuilderQuoteBuilder() {
     setSaving(false)
     if (error) { console.error(error); return }
     setSavedConfirmation(data.quote_number)
+    setPriceRevealed(true)
     setTimeout(() => setSavedConfirmation(null), 4000)
     loadRecentQuotes()
   }
@@ -608,6 +625,37 @@ export default function BuilderQuoteBuilder() {
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Quote summary</p>
             {!canShowPrice ? (
               <p className="text-sm text-gray-400 dark:text-gray-500 italic">Select all required components to see pricing.</p>
+            ) : !priceRevealed ? (
+              <>
+                <div className="py-4 text-center">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Customer price</p>
+                  <p className="text-2xl font-medium text-gray-300 dark:text-gray-600 tabular-nums select-none">$ ●●●●</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Hidden until revealed and saved</p>
+                </div>
+                <button
+                  onClick={saveQuote}
+                  disabled={saving}
+                  className="hidden md:flex w-full py-2.5 text-sm rounded-md items-center justify-center gap-1.5 bg-indigo-600 dark:bg-indigo-500 text-white hover:bg-indigo-700 dark:hover:bg-indigo-600 disabled:opacity-50 font-medium"
+                >
+                  <Save className="w-3.5 h-3.5" /> {saving ? 'Saving…' : 'Reveal price & save'}
+                </button>
+                <p className="hidden md:block text-[11px] text-gray-400 dark:text-gray-500 mt-2 text-center">A new quote record is created each time</p>
+
+                <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Component breakdown</p>
+                  <div className="text-sm space-y-1">
+                    {includesBattery && selectedBattery && (
+                      <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Battery</span><span>{selectedBattery.brand} {selectedBattery.kwh} kWh</span></div>
+                    )}
+                    {selectedInverter && (
+                      <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">Inverter</span><span>{selectedInverter.code} ({selectedInverter.phase}{selectedInverter.paralleled ? ', paralleled' : ''})</span></div>
+                    )}
+                    {includesSolar && selectedPv && (
+                      <div className="flex justify-between"><span className="text-gray-500 dark:text-gray-400">PV</span><span>{selectedPv.system_size_kw} kW · {selectedPv.panel_count} panels</span></div>
+                    )}
+                  </div>
+                </div>
+              </>
             ) : (
               <>
                 <div className="flex items-baseline justify-between">
@@ -684,11 +732,8 @@ export default function BuilderQuoteBuilder() {
                   </div>
                 )}
 
-                <button onClick={saveQuote} disabled={saving} className="mt-4 hidden md:flex w-full py-2 text-sm border rounded-md items-center justify-center gap-1.5 bg-indigo-600 dark:bg-indigo-500 text-white border-indigo-600 dark:border-indigo-500 hover:bg-indigo-700 dark:hover:bg-indigo-600 disabled:opacity-50">
-                  <Save className="w-3.5 h-3.5" /> {saving ? 'Saving…' : 'Save quote'}
-                </button>
                 {savedConfirmation && (
-                  <div className="mt-2 text-xs text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-800 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
+                  <div className="mt-4 text-xs text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-800 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
                     <Check className="w-3.5 h-3.5 flex-shrink-0" />
                     Saved as <code className="font-mono">{savedConfirmation}</code>
                   </div>
@@ -739,18 +784,23 @@ export default function BuilderQuoteBuilder() {
       {stage === 'pricing' && (
         <div className="fixed bottom-0 left-0 right-0 md:hidden bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-3 py-2.5 flex items-center gap-3 shadow-lg z-40">
           <div className="flex-1 min-w-0">
-            {canShowPrice ? (
+            {!canShowPrice ? (
+              <p className="text-xs text-gray-400 dark:text-gray-500 italic">Select components</p>
+            ) : priceRevealed ? (
               <>
                 <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-tight">Customer price (incl. GST) · {marginPct}% margin</p>
                 <p className="text-lg font-medium leading-tight tabular-nums">{formatCurrency(priceAfter)}</p>
               </>
             ) : (
-              <p className="text-xs text-gray-400 dark:text-gray-500 italic">Select components</p>
+              <>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-tight">Price hidden</p>
+                <p className="text-lg font-medium leading-tight text-gray-300 dark:text-gray-600 tabular-nums select-none">$ ●●●●</p>
+              </>
             )}
           </div>
           <button onClick={saveQuote} disabled={!canShowPrice || saving} className="px-4 py-2.5 bg-indigo-600 dark:bg-indigo-500 text-white rounded-md text-sm font-medium disabled:opacity-40 flex items-center gap-1.5 min-h-[44px]">
             <Save className="w-4 h-4" />
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? 'Saving…' : priceRevealed ? 'Re-save' : 'Reveal'}
           </button>
         </div>
       )}
