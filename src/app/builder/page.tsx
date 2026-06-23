@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Zap, User, LogOut, Save, X, Check, Info } from 'lucide-react'
+import { Zap, User, LogOut, Save, Check, Info } from 'lucide-react'
 
 const supabase = createClient()
 
@@ -21,7 +21,8 @@ type SolarStc = { system_size_kw: number; year: number; stc_value: number; exces
 type BatteryStc = { battery_kwh: number; year: number; stc_value: number; excess_revenue: number }
 type BuilderCosts = { product_set: string; product_overhead: number; other_overhead: number; solar_base_install: number; solar_install_per_panel: number; battery_base_install: number; battery_install_per_kwh_over: number }
 type BuilderConfig = { margin_min_pct: number; margin_max_pct: number; margin_default_pct: number; double_storey_per_panel: number; tile_per_panel: number; two_stage_cost: number; vic_ces_cost: number; regional_cost: number; hcbf_cost: number; hcbf_threshold: number; install_inflation_pct: number; install_inflation_base_year: number }
-type SavedQuote = { id: string; quote_number: string; customer_name: string | null; user_id: string | null; created_at: string | null; total_price: number | null; builder_margin_pct: number | null }
+type BuilderCompany = { id: number; name: string; active: boolean }
+type BuilderQuoteRecord = { id: string; quote_number: string; builder_name: string; site_address: string; user_id: string | null; created_at: string | null; total_price: number | null; margin_pct: number | null; product_set: string | null }
 
 const AU_STATES = ['VIC', 'NSW', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT'] as const
 type AuState = typeof AU_STATES[number]
@@ -72,16 +73,21 @@ export default function BuilderQuoteBuilder() {
   const [hasEmergencyBackstop, setHasEmergencyBackstop] = useState(false)
   const [marginPct, setMarginPct] = useState<number>(20)
 
-  const [showSaveDialog, setShowSaveDialog] = useState(false)
-  const [saveNickname, setSaveNickname] = useState('')
-  const [saveCustomerName, setSaveCustomerName] = useState('')
+  // Stage 1: lead context — builder + site address must be filled before pricing shows
+  const [stage, setStage] = useState<'lead' | 'pricing'>('lead')
+  const [builderCompanies, setBuilderCompanies] = useState<BuilderCompany[]>([])
+  const [builderChoice, setBuilderChoice] = useState<string>('')  // selected from dropdown OR '__other__'
+  const [builderOther, setBuilderOther] = useState<string>('')    // free-text when 'Other' is picked
+  const [siteAddress, setSiteAddress] = useState<string>('')
+
   const [saving, setSaving] = useState(false)
   const [savedConfirmation, setSavedConfirmation] = useState<string | null>(null)
-  const [recentQuotes, setRecentQuotes] = useState<SavedQuote[]>([])
+  const [recentQuotes, setRecentQuotes] = useState<BuilderQuoteRecord[]>([])
 
   useEffect(() => {
     loadProfile()
     loadConfig()
+    loadBuilderCompanies()
     loadRecentQuotes()
   }, [])
 
@@ -122,14 +128,26 @@ export default function BuilderQuoteBuilder() {
     if (data) setConfig(data)
   }
 
+  const loadBuilderCompanies = async () => {
+    const { data } = await supabase.from('builder_companies').select('*').eq('active', true).order('name')
+    if (data) setBuilderCompanies(data as BuilderCompany[])
+  }
+
   const loadRecentQuotes = async () => {
-    const { data } = await supabase.from('quotes')
-      .select('id, quote_number, customer_name, user_id, created_at, total_price, builder_margin_pct')
-      .eq('is_builder_pricing', true)
+    const { data } = await supabase.from('builder_quotes')
+      .select('id, quote_number, builder_name, site_address, user_id, created_at, total_price, margin_pct, product_set')
       .order('created_at', { ascending: false })
       .limit(20)
-    if (data) setRecentQuotes(data as SavedQuote[])
+    if (data) setRecentQuotes(data as BuilderQuoteRecord[])
   }
+
+  // Resolve the actual builder name: dropdown value, or free-text if 'Other' was picked
+  const resolvedBuilderName = useMemo(() => {
+    if (builderChoice === '__other__') return builderOther.trim()
+    return builderChoice.trim()
+  }, [builderChoice, builderOther])
+
+  const isLeadValid = resolvedBuilderName.length > 0 && siteAddress.trim().length > 0
 
   const includesBattery = productSet === 'Solar and Battery' || productSet === 'Battery Only'
   const includesSolar = productSet === 'Solar and Battery' || productSet === 'Solar Only'
@@ -302,57 +320,57 @@ export default function BuilderQuoteBuilder() {
   }, [availableInverters, selectedInverter])
 
   const saveQuote = async () => {
-    if (!profile) return
+    if (!profile || !isLeadValid || !canShowPrice) return
     setSaving(true)
-    const quoteNumber = generateQuoteNumber()
-    const { data, error } = await supabase.from('quotes').insert({
+    const quoteNumber = `BQ-${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}`
+    const { data, error } = await supabase.from('builder_quotes').insert({
       quote_number: quoteNumber,
-      nickname: saveNickname.trim() || null,
-      customer_name: saveCustomerName.trim() || null,
       user_id: profile.id,
-      package_id: null,
+      builder_name: resolvedBuilderName,
+      site_address: siteAddress.trim(),
       product_set: productSet,
-      brand: includesBattery && selectedBattery ? selectedBattery.brand : null,
-      battery_kwh: includesBattery && selectedBattery ? selectedBattery.kwh : null,
-      panel_count: includesSolar && selectedPv ? selectedPv.panel_count : null,
-      inverter_phase: selectedInverter ? selectedInverter.phase : null,
-      inverter_paralleled: includesBattery ? isParalleled : null,
-      territory: isRegional ? 'Regional' : 'Metro',
-      zone: 4,
-      finance_term: 'Cash',
-      base_price: priceBefore,
-      stc_discount: totalStc,
-      extras_total: 0,
+      state,
+      year,
+      phase,
+      margin_pct: marginPct,
+      battery_id: batteryId,
+      battery_code: selectedBattery?.code ?? null,
+      battery_kwh: selectedBattery?.kwh ?? null,
+      inverter_id: inverterId,
+      inverter_code: selectedInverter?.code ?? null,
+      pv_id: pvId,
+      pv_code: selectedPv?.code ?? null,
+      panel_count: selectedPv?.panel_count ?? null,
+      system_size_kw: selectedPv?.system_size_kw ?? null,
+      is_paralleled: isParalleled,
+      is_double_storey: isDoubleStorey,
+      is_tile: isTile,
+      is_two_stage: isTwoStage,
+      is_regional: isRegional,
+      has_gateway: hasGateway,
+      has_emergency_backstop: hasEmergencyBackstop,
+      total_cost: totalCost,
+      revenue_ex_gst: revenue,
+      solar_stc: solarStc,
+      battery_stc: batteryStc,
+      excess_revenue: totalExcessRevenue,
+      hcbf_applied: isHcbfRequired,
+      inflation_factor: inflationFactor,
       total_price: priceAfter,
-      status: 'draft',
-      is_builder_pricing: true,
-      builder_margin_pct: marginPct,
-      builder_year: year,
-      builder_options: {
-        state, is_paralleled: isParalleled, hcbf_required: isHcbfRequired,
-        double_storey: isDoubleStorey, tile: isTile, two_stage: isTwoStage, regional: isRegional, gateway: hasGateway, emergency_backstop: hasEmergencyBackstop,
-        selected: {
-          battery_id: batteryId, battery_code: selectedBattery?.code,
-          inverter_id: inverterId, inverter_code: selectedInverter?.code,
-          pv_id: pvId, pv_code: selectedPv?.code,
-        },
-        breakdown: {
-          components: componentCost, overhead: overheadCost,
-          solar_install: solarInstall, battery_install: batteryInstall,
-          inflation_factor: inflationFactor, inflation_pct: config.install_inflation_pct,
-          adders: totalAdders, hcbf: hcbfCost,
-          total_cost: totalCost, revenue: revenue,
-          solar_stc: solarStc, battery_stc: batteryStc,
-          solar_excess_revenue: solarExcessRevenue, battery_excess_revenue: batteryExcessRevenue,
-          total_customer_deductions: totalCustomerDeductions,
-        },
+      breakdown: {
+        components: componentCost, overhead: overheadCost,
+        solar_install: solarInstall, battery_install: batteryInstall,
+        adders: totalAdders, hcbf: hcbfCost,
+        total_cost: totalCost, revenue: revenue,
+        revenue_inc_gst: revenueIncGst,
+        solar_stc: solarStc, battery_stc: batteryStc,
+        solar_excess_revenue: solarExcessRevenue, battery_excess_revenue: batteryExcessRevenue,
+        total_customer_deductions: totalCustomerDeductions,
+        inflation_factor: inflationFactor, inflation_pct: config.install_inflation_pct,
       },
     }).select('quote_number').single()
     setSaving(false)
     if (error) { console.error(error); return }
-    setShowSaveDialog(false)
-    setSaveNickname('')
-    setSaveCustomerName('')
     setSavedConfirmation(data.quote_number)
     setTimeout(() => setSavedConfirmation(null), 4000)
     loadRecentQuotes()
@@ -409,7 +427,71 @@ export default function BuilderQuoteBuilder() {
           </div>
         </header>
 
-        <div className="grid md:grid-cols-2 gap-4 md:gap-5">
+        {stage === 'lead' && (
+          <div className="max-w-xl mx-auto">
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Lead details</p>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Builder</label>
+                  <select
+                    value={builderChoice}
+                    onChange={e => setBuilderChoice(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900 focus:outline-none focus:border-gray-400 dark:focus:border-gray-500"
+                  >
+                    <option value="">Select a builder…</option>
+                    {builderCompanies.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+                    <option value="__other__">Other (specify)</option>
+                  </select>
+                  {builderChoice === '__other__' && (
+                    <input
+                      type="text"
+                      value={builderOther}
+                      onChange={e => setBuilderOther(e.target.value)}
+                      placeholder="Enter builder name"
+                      autoFocus
+                      className="mt-2 w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900 focus:outline-none focus:border-gray-400 dark:focus:border-gray-500"
+                    />
+                  )}
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Site address</label>
+                  <input
+                    type="text"
+                    value={siteAddress}
+                    onChange={e => setSiteAddress(e.target.value)}
+                    placeholder="e.g. 12 Example St, Mooroolbark VIC 3138"
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900 focus:outline-none focus:border-gray-400 dark:focus:border-gray-500"
+                  />
+                </div>
+                <button
+                  onClick={() => setStage('pricing')}
+                  disabled={!isLeadValid}
+                  className="w-full py-2.5 text-sm bg-indigo-600 dark:bg-indigo-500 text-white rounded-md font-medium hover:bg-indigo-700 dark:hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Continue →
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {stage === 'pricing' && (
+          <>
+            <div className="mb-4 px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Quoting for</p>
+                <p className="text-sm font-medium truncate">{resolvedBuilderName} <span className="text-gray-400 dark:text-gray-500 font-normal">·</span> {siteAddress}</p>
+              </div>
+              <button
+                onClick={() => setStage('lead')}
+                className="text-xs text-indigo-700 dark:text-indigo-400 hover:underline flex-shrink-0"
+              >
+                Edit
+              </button>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4 md:gap-5">
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 md:p-5">
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">1. System</p>
             <div className="space-y-3.5">
@@ -602,8 +684,8 @@ export default function BuilderQuoteBuilder() {
                   </div>
                 )}
 
-                <button onClick={() => setShowSaveDialog(true)} className="mt-4 hidden md:flex w-full py-2 text-sm border rounded-md items-center justify-center gap-1.5 bg-indigo-600 dark:bg-indigo-500 text-white border-indigo-600 dark:border-indigo-500 hover:bg-indigo-700 dark:hover:bg-indigo-600">
-                  <Save className="w-3.5 h-3.5" /> Save quote
+                <button onClick={saveQuote} disabled={saving} className="mt-4 hidden md:flex w-full py-2 text-sm border rounded-md items-center justify-center gap-1.5 bg-indigo-600 dark:bg-indigo-500 text-white border-indigo-600 dark:border-indigo-500 hover:bg-indigo-700 dark:hover:bg-indigo-600 disabled:opacity-50">
+                  <Save className="w-3.5 h-3.5" /> {saving ? 'Saving…' : 'Save quote'}
                 </button>
                 {savedConfirmation && (
                   <div className="mt-2 text-xs text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-800 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
@@ -615,6 +697,8 @@ export default function BuilderQuoteBuilder() {
             )}
           </div>
         </div>
+          </>
+        )}
 
         <div className="mt-5 md:mt-6">
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
@@ -628,7 +712,8 @@ export default function BuilderQuoteBuilder() {
                 <thead className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800">
                   <tr>
                     <th className="text-left px-3 py-2 font-normal">Quote</th>
-                    <th className="text-left px-3 py-2 font-normal">Customer</th>
+                    <th className="text-left px-3 py-2 font-normal">Builder</th>
+                    <th className="text-left px-3 py-2 font-normal">Site</th>
                     <th className="text-right px-3 py-2 font-normal">Margin</th>
                     <th className="text-right px-3 py-2 font-normal">Total</th>
                   </tr>
@@ -637,8 +722,9 @@ export default function BuilderQuoteBuilder() {
                   {recentQuotes.map(q => (
                     <tr key={q.id} className="border-t border-gray-100 dark:border-gray-800">
                       <td className="px-3 py-2 font-mono text-xs">{q.quote_number}</td>
-                      <td className="px-3 py-2">{q.customer_name || <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{q.builder_margin_pct ? `${q.builder_margin_pct}%` : '—'}</td>
+                      <td className="px-3 py-2 text-xs">{q.builder_name || <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
+                      <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400 max-w-[200px] truncate" title={q.site_address ?? ''}>{q.site_address || <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{q.margin_pct ? `${q.margin_pct}%` : '—'}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{q.total_price ? formatCurrency(q.total_price) : '—'}</td>
                     </tr>
                   ))}
@@ -649,49 +735,25 @@ export default function BuilderQuoteBuilder() {
         </div>
       </main>
 
-      {showSaveDialog && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => !saving && setShowSaveDialog(false)}>
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <p className="font-medium">Save builder quote</p>
-              <button onClick={() => !saving && setShowSaveDialog(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Customer name (optional)</label>
-                <input type="text" value={saveCustomerName} onChange={e => setSaveCustomerName(e.target.value)} placeholder="e.g. Jane Smith" className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900 focus:outline-none focus:border-gray-400 dark:focus:border-gray-500" autoFocus />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Nickname / note (optional)</label>
-                <input type="text" value={saveNickname} onChange={e => setSaveNickname(e.target.value)} placeholder="e.g. builder X upgrade" className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900 focus:outline-none focus:border-gray-400 dark:focus:border-gray-500" />
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button onClick={() => setShowSaveDialog(false)} disabled={saving} className="flex-1 py-2.5 md:py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">Cancel</button>
-                <button onClick={saveQuote} disabled={saving} className="flex-1 py-2.5 md:py-2 text-sm bg-indigo-600 dark:bg-indigo-500 text-white rounded-md hover:bg-indigo-700 dark:hover:bg-indigo-600 disabled:opacity-50">{saving ? 'Saving…' : 'Save quote'}</button>
-              </div>
-            </div>
+
+      {stage === 'pricing' && (
+        <div className="fixed bottom-0 left-0 right-0 md:hidden bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-3 py-2.5 flex items-center gap-3 shadow-lg z-40">
+          <div className="flex-1 min-w-0">
+            {canShowPrice ? (
+              <>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-tight">Customer price (incl. GST) · {marginPct}% margin</p>
+                <p className="text-lg font-medium leading-tight tabular-nums">{formatCurrency(priceAfter)}</p>
+              </>
+            ) : (
+              <p className="text-xs text-gray-400 dark:text-gray-500 italic">Select components</p>
+            )}
           </div>
+          <button onClick={saveQuote} disabled={!canShowPrice || saving} className="px-4 py-2.5 bg-indigo-600 dark:bg-indigo-500 text-white rounded-md text-sm font-medium disabled:opacity-40 flex items-center gap-1.5 min-h-[44px]">
+            <Save className="w-4 h-4" />
+            {saving ? 'Saving…' : 'Save'}
+          </button>
         </div>
       )}
-
-      <div className="fixed bottom-0 left-0 right-0 md:hidden bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-3 py-2.5 flex items-center gap-3 shadow-lg z-40">
-        <div className="flex-1 min-w-0">
-          {canShowPrice ? (
-            <>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-tight">Customer price (incl. GST) · {marginPct}% margin</p>
-              <p className="text-lg font-medium leading-tight tabular-nums">{formatCurrency(priceAfter)}</p>
-            </>
-          ) : (
-            <p className="text-xs text-gray-400 dark:text-gray-500 italic">Select components</p>
-          )}
-        </div>
-        <button onClick={() => setShowSaveDialog(true)} disabled={!canShowPrice} className="px-4 py-2.5 bg-indigo-600 dark:bg-indigo-500 text-white rounded-md text-sm font-medium disabled:opacity-40 flex items-center gap-1.5 min-h-[44px]">
-          <Save className="w-4 h-4" />
-          Save
-        </button>
-      </div>
     </div>
   )
 }
