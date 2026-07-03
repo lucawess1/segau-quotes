@@ -315,9 +315,9 @@ export default function BuilderQuoteBuilder() {
   // - if battery has a paralleled threshold and kwh exceeds it: must be paralleled inverter
   //   (NULL threshold = never requires paralleled, e.g. Alpha G3)
   // - if multiple battery brands exist: match the selected battery's brand
-  const availableInverters = useMemo(() => {
+  const filterInvertersForPhase = (targetPhase: '1PH' | '3PH'): Inverter[] => {
     const requiredScope = includesBattery ? 'battery' : 'solar_only'
-    let list = inverters.filter(i => i.scope === requiredScope && i.phase === phase)
+    let list = inverters.filter(i => i.scope === requiredScope && i.phase === targetPhase)
     if (includesBattery && selectedBattery) {
       const threshold = selectedBattery.parallel_required_above_kwh
       if (threshold != null && selectedBattery.kwh > threshold) {
@@ -326,7 +326,28 @@ export default function BuilderQuoteBuilder() {
       if (availableBrands.length > 1) list = list.filter(i => i.brand === selectedBattery.brand)
     }
     return list
-  }, [includesBattery, selectedBattery, inverters, availableBrands, phase])
+  }
+
+  const availableInverters = useMemo(
+    () => filterInvertersForPhase(phase),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [includesBattery, selectedBattery, inverters, availableBrands, phase]
+  )
+
+  // Auto-switch phase when the current phase has no valid inverters but the other phase does.
+  // Prevents user being stuck with an empty inverter dropdown when only one phase is compatible.
+  const [phaseAutoSwitchedNotice, setPhaseAutoSwitchedNotice] = useState<string | null>(null)
+  useEffect(() => {
+    if (availableInverters.length > 0) return  // current phase works, nothing to do
+    const otherPhase = phase === '1PH' ? '3PH' : '1PH'
+    const otherPhaseOptions = filterInvertersForPhase(otherPhase)
+    if (otherPhaseOptions.length > 0) {
+      setPhase(otherPhase)
+      setPhaseAutoSwitchedNotice(`Switched to ${otherPhase} — no ${phase} inverters available for this selection`)
+      setTimeout(() => setPhaseAutoSwitchedNotice(null), 5000)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableInverters, phase])
 
   // Default-select first available inverter; rescue invalid selection on filter change
   useEffect(() => {
@@ -552,6 +573,11 @@ export default function BuilderQuoteBuilder() {
                     </button>
                   ))}
                 </div>
+                {phaseAutoSwitchedNotice && (
+                  <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400 italic">
+                    {phaseAutoSwitchedNotice}
+                  </p>
+                )}
               </div>
 
               <ComponentSelector
