@@ -14,7 +14,7 @@ type Profile = {
   teams: string[]
 }
 
-type Battery = { id: number; code: string; brand: string; kwh: number; model: string | null; cost: number; active: boolean }
+type Battery = { id: number; code: string; brand: string; kwh: number; model: string | null; cost: number; active: boolean; parallel_required_above_kwh: number | null }
 type Inverter = { id: number; code: string; brand: string; phase: string; model: string | null; cost: number; gateway_cost: number; emergency_backstop_cost: number; paralleled: boolean; scope: 'solar_only' | 'battery'; active: boolean }
 type PV = { id: number; code: string; panel_model: string; panel_count: number; system_size_kw: number; cost: number; active: boolean }
 type SolarStc = { system_size_kw: number; year: number; stc_value: number; excess_revenue: number }
@@ -312,13 +312,17 @@ export default function BuilderQuoteBuilder() {
   // Available inverters depends on:
   // - scope: 'solar_only' for Solar Only; 'battery' otherwise
   // - phase: must match the selected phase (1PH or 3PH)
-  // - if battery > 30 kWh: must be paralleled inverter
+  // - if battery has a paralleled threshold and kwh exceeds it: must be paralleled inverter
+  //   (NULL threshold = never requires paralleled, e.g. Alpha G3)
   // - if multiple battery brands exist: match the selected battery's brand
   const availableInverters = useMemo(() => {
     const requiredScope = includesBattery ? 'battery' : 'solar_only'
     let list = inverters.filter(i => i.scope === requiredScope && i.phase === phase)
     if (includesBattery && selectedBattery) {
-      if (selectedBattery.kwh > 30) list = list.filter(i => i.paralleled)
+      const threshold = selectedBattery.parallel_required_above_kwh
+      if (threshold != null && selectedBattery.kwh > threshold) {
+        list = list.filter(i => i.paralleled)
+      }
       if (availableBrands.length > 1) list = list.filter(i => i.brand === selectedBattery.brand)
     }
     return list
@@ -559,14 +563,25 @@ export default function BuilderQuoteBuilder() {
                   label: `${i.code} (${i.phase}${i.paralleled ? ', paralleled' : ''})`,
                   cost: i.cost,
                 }))}
-                emptyHint={includesBattery && selectedBattery && selectedBattery.kwh > 30 ? "No paralleled inverters configured" : "No inverters configured"}
+                emptyHint={
+                  includesBattery && selectedBattery &&
+                  selectedBattery.parallel_required_above_kwh != null &&
+                  selectedBattery.kwh > selectedBattery.parallel_required_above_kwh
+                    ? "No paralleled inverters configured for this battery"
+                    : "No inverters configured"
+                }
               />
 
               {includesBattery && selectedBattery && isParalleled && (
                 <div className="pt-1 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                   <span className="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded text-[10px] font-medium">PARALLELED</span>
                   <span>
-                    Inverter is paralleled — battery install ×2{selectedBattery.kwh > 30 ? ' (required for >30 kWh)' : ''}
+                    Inverter is paralleled — battery install ×2{
+                      selectedBattery.parallel_required_above_kwh != null &&
+                      selectedBattery.kwh > selectedBattery.parallel_required_above_kwh
+                        ? ` (required for >${selectedBattery.parallel_required_above_kwh} kWh)`
+                        : ''
+                    }
                   </span>
                 </div>
               )}
