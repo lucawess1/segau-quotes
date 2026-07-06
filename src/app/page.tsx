@@ -156,7 +156,17 @@ export default function QuoteBuilder() {
       supabase.from('retail_config').select('*').eq('id', 1).single(),
     ])
     if (hwhpRes.data) setHwhpProducts(hwhpRes.data as HwhpProduct[])
-    if (hvacRes.data) setHvacProducts(hvacRes.data as HvacProduct[])
+    if (hvacRes.data) {
+      // Order HVAC list: inverter splits first (smaller units, more common), ducted last (larger, less common).
+      // Within each group, keep alphabetical/kW order from the DB query.
+      const sorted = [...(hvacRes.data as HvacProduct[])].sort((a, b) => {
+        const aDucted = a.model.toLowerCase().includes('ducted') ? 1 : 0
+        const bDucted = b.model.toLowerCase().includes('ducted') ? 1 : 0
+        if (aDucted !== bDucted) return aDucted - bDucted   // splits (0) before ducted (1)
+        return a.model.localeCompare(b.model)               // stable within group
+      })
+      setHvacProducts(sorted)
+    }
     if (cfgRes.data) setRetailConfig(cfgRes.data as RetailConfig)
   }
 
