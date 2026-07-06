@@ -24,6 +24,10 @@ type Discount = {
   notes: string | null
 }
 
+type HwhpProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; stc_value: number; inbound_discount: number; asc_discount: number; active: boolean }
+type HvacProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; inbound_discount: number; asc_discount: number; active: boolean }
+type RetailConfig = { hwhp_combo_discount: number }
+
 // Minimal Quote shape used by the recent quotes list (matches the columns we select)
 type SavedQuote = {
   id: number
@@ -41,10 +45,17 @@ type SavedQuote = {
   created_at: string | null
 }
 
+// Base product mapping — used for composable HWHP add-on flow
+const HWHP_BASE_MAP: Record<string, string | null> = {
+  'HWHP Only': null,
+  'Solar and HWHP': 'Solar Only',
+  'Battery and HWHP': 'Battery Only',
+  'HWHP, Solar and Battery': 'Solar and Battery',
+}
+
 const HAS_BATTERY = ['Solar and Battery', 'Battery Only', 'Battery Only - Additional', 'Battery and HWHP', 'HWHP, Solar and Battery']
 const HAS_SOLAR = ['Solar Only', 'Solar and Battery', 'Solar and HWHP', 'HWHP, Solar and Battery']
 const HAS_HWHP = ['HWHP Only', 'Battery and HWHP', 'Solar and HWHP', 'HWHP, Solar and Battery']
-const HAS_HVAC = ['HVAC']
 
 // Inbound channel sells a different panel model under the same prices.
 // This map substitutes display values when rendering — the DB stays as-is
@@ -59,6 +70,7 @@ const displayPanelModel = (model: string | null | undefined): string => {
   return PANEL_MODEL_SUBSTITUTIONS[model] ?? model
 }
 
+// HVAC is now a toggle, not a product type
 const VISIBLE_PRODUCT_SETS = [
   'Solar and Battery',
   'Battery Only',
@@ -68,7 +80,6 @@ const VISIBLE_PRODUCT_SETS = [
   'Battery and HWHP',
   'Solar and HWHP',
   'HWHP, Solar and Battery',
-  'HVAC',
 ]
 
 export default function QuoteBuilder() {
@@ -125,10 +136,21 @@ export default function QuoteBuilder() {
   // Inbound discounts (loaded once on mount; map of package_id -> discount_amount)
   const [discounts, setDiscounts] = useState<Map<number, number>>(new Map())
 
+  // NEW composable add-on state
+  const [hwhpProducts, setHwhpProducts] = useState<HwhpProduct[]>([])
+  const [hvacProducts, setHvacProducts] = useState<HvacProduct[]>([])
+  const [retailConfig, setRetailConfig] = useState<RetailConfig>({ hwhp_combo_discount: 600 })
+  const [selectedHwhpId, setSelectedHwhpId] = useState<number | null>(null)
+  const [isHvacIncluded, setIsHvacIncluded] = useState<boolean>(false)
+  const [selectedHvacId, setSelectedHvacId] = useState<number | null>(null)
+
   const includesBattery = HAS_BATTERY.includes(productSet)
   const includesSolar = HAS_SOLAR.includes(productSet)
   const includesHwhp = HAS_HWHP.includes(productSet)
-  const includesHvac = HAS_HVAC.includes(productSet)
+  const includesHvac = isHvacIncluded
+
+  // Whether HWHP is combined with a non-HWHP base (used for $600 combo discount rule)
+  const hasNonHwhpBase = productSet !== 'HWHP Only' && (includesSolar || includesBattery)
 
   useEffect(() => {
     loadExtrasWithCache()
@@ -148,7 +170,42 @@ export default function QuoteBuilder() {
     loadProfile()
     loadPricingVersion()
     loadRecentQuotes()
+    loadAddOnProducts()
   }, [])
+
+  const loadAddOnProducts = async () => {
+    const [hwhpRes, hvacRes, cfgRes] = await Promise.all([
+      supabase.from('hwhp_products').select('*').eq('active', true).order('model'),
+      supabase.from('hvac_products').select('*').eq('active', true).order('model'),
+      supabase.from('retail_config').select('*').eq('id', 1).single(),
+    ])
+    if (hwhpRes.data) setHwhpProducts(hwhpRes.data as HwhpProduct[])
+    if (hvacRes.data) {
+      const sorted = [...(hvacRes.data as HvacProduct[])].sort((a, b) => {
+        const aDucted = a.model.toLowerCase().includes('ducted') ? 1 : 0
+        const bDucted = b.model.toLowerCase().includes('ducted') ? 1 : 0
+        if (aDucted !== bDucted) return aDucted - bDucted
+        return a.model.localeCompare(b.model)
+      })
+      setHvacProducts(sorted)
+    }
+    if (cfgRes.data) setRetailConfig(cfgRes.data as RetailConfig)
+  }
+
+  useEffect(() => {
+    if (includesHwhp && hwhpProducts.length > 0 && !selectedHwhpId) setSelectedHwhpId(hwhpProducts[0].id)
+    if (!includesHwhp) setSelectedHwhpId(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [includesHwhp, hwhpProducts])
+
+  useEffect(() => {
+    if (isHvacIncluded && hvacProducts.length > 0 && !selectedHvacId) setSelectedHvacId(hvacProducts[0].id)
+    if (!isHvacIncluded) setSelectedHvacId(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHvacIncluded, hvacProducts])
+
+  const selectedHwhp = hwhpProducts.find(h => h.id === selectedHwhpId) || null
+  const selectedHvac = hvacProducts.find(h => h.id === selectedHvacId) || null
 
   const loadExtrasWithCache = async () => {
     const CACHE_KEY = 'segpb_extras_cache'
@@ -263,9 +320,14 @@ export default function QuoteBuilder() {
     setLoadingQuotes(false)
   }
 
+  const basePackageProductSet = useMemo(() => {
+    if (productSet in HWHP_BASE_MAP) return HWHP_BASE_MAP[productSet]
+    return productSet
+  }, [productSet])
+
   const setPackages_ = useMemo(
-    () => packages.filter(p => p.product_set === productSet),
-    [packages, productSet]
+    () => basePackageProductSet ? packages.filter(p => p.product_set === basePackageProductSet) : [],
+    [packages, basePackageProductSet]
   )
 
   const availableBrands = useMemo(() => {
@@ -440,23 +502,14 @@ export default function QuoteBuilder() {
     }
   }, [availableInverterTypes, inverterType, showInverterTypeFilter])
 
-  // Match a package
+  // Match a base package. HWHP and HVAC are add-ons (not baked into the base package).
   const matchedPackage = setPackages_.find(p => {
-    const specs = (p.specs as any) || {}
     if (includesBattery) {
       if (p.brand !== brand) return false
       if ((p.battery_kwh ?? 0) !== batteryKwh) return false
     }
     if (includesSolar) {
       if ((p.panel_count ?? 0) !== panels) return false
-    }
-    if (includesHwhp) {
-      if (specs.hwhp_litres !== hwhpLitres) return false
-      if (specs.hwhp_model !== hwhpModel) return false
-    }
-    if (includesHvac) {
-      if (specs.hvac_type !== hvacType) return false
-      if (specs.hvac_kw !== hvacKw) return false
     }
     if (showPhaseFilter && p.inverter_phase !== inverterPhase) return false
     if (showParalleledFilter && p.inverter_paralleled !== inverterParalleled) return false
@@ -508,14 +561,47 @@ export default function QuoteBuilder() {
     return sum + (e.charge_type === 'Per Panel' ? e.unit_price * panels : e.unit_price)
   }, 0)
 
-  // Inbound discount math:
-  // 1. Subtract discount from cash_after_stc (cash price the customer actually pays)
-  // 2. For Cash term: base = discounted_cash_after_stc + stc
-  // 3. For 60m: discounted_cash_after_stc / 0.80 = 60m_after_stc, then + stc = 60m_before
-  // 4. For 84m: discounted_cash_after_stc / 0.70 = 84m_after_stc, then + stc = 84m_before
-  const inboundDiscount = matchedPackage ? (discounts.get(matchedPackage.id) ?? 0) : 0
-  const stc = cashVariant?.stc_discount ?? variant?.stc_discount ?? 0
-  const cashAfterStc = cashVariant?.price_after_stc ?? 0
+  // Compose the CASH price from base package + HWHP + HVAC add-ons.
+  // Finance-term math is applied uniformly afterwards (dividing by 0.80 or 0.70 for 60m/84m).
+  // All add-on discounts are dollar amounts subtracted from cash-after-STC just like the base discount.
+
+  // Base
+  const baseInboundDiscount = matchedPackage ? (discounts.get(matchedPackage.id) ?? 0) : 0
+  const baseStc = cashVariant?.stc_discount ?? variant?.stc_discount ?? 0
+  const baseCashAfterStc = cashVariant?.price_after_stc ?? 0
+
+  // HWHP add-on — pick metro/regional cost, apply own STC & inbound discount
+  const hwhpCost = useMemo(() => {
+    if (!includesHwhp || !selectedHwhp) return 0
+    const c = territory === 'Regional' ? selectedHwhp.cost_regional : selectedHwhp.cost_metro
+    return c ?? 0
+  }, [includesHwhp, selectedHwhp, territory])
+  const hwhpStc = includesHwhp && selectedHwhp ? selectedHwhp.stc_value : 0
+  const hwhpInboundDiscount = includesHwhp && selectedHwhp ? selectedHwhp.inbound_discount : 0
+
+  // HVAC add-on — pick metro/regional cost, apply inbound discount (no STC)
+  const hvacCost = useMemo(() => {
+    if (!includesHvac || !selectedHvac) return 0
+    const c = territory === 'Regional' ? selectedHvac.cost_regional : selectedHvac.cost_metro
+    return c ?? 0
+  }, [includesHvac, selectedHvac, territory])
+  const hvacInboundDiscount = includesHvac && selectedHvac ? selectedHvac.inbound_discount : 0
+
+  // $600 HWHP combo discount fires only when HWHP is paired with a non-HWHP base
+  const hwhpComboDiscount = includesHwhp && hasNonHwhpBase ? retailConfig.hwhp_combo_discount : 0
+
+  // Combined cash-after-STC (before inbound discount adjustments):
+  //   base_cash_after_stc + hwhp_cost - hwhp_stc + hvac_cost - hwhp_combo_discount
+  const combinedCashAfterStcPreDiscount =
+    baseCashAfterStc + (hwhpCost - hwhpStc) + hvacCost - hwhpComboDiscount
+
+  // Total inbound discount = base + HWHP + HVAC discounts
+  const inboundDiscount = baseInboundDiscount + hwhpInboundDiscount + hvacInboundDiscount
+
+  // Kept for backward compatibility of downstream code (some UI shows stc separately)
+  const stc = baseStc + hwhpStc
+  const cashAfterStc = combinedCashAfterStcPreDiscount
+
   const discountedCashAfterStc = Math.max(0, cashAfterStc - inboundDiscount)
 
   // Derive the after-STC price for the currently selected finance term
@@ -524,8 +610,7 @@ export default function QuoteBuilder() {
   const base = afterStc + stc
   const total = afterStc + extrasTotal
 
-  // Fortnightly: scale the standard fortnightly proportionally based on how much the after-STC price moved
-  // (e.g. if discounted after-STC is 90% of standard after-STC, fortnightly is 90% of standard fortnightly)
+  // Fortnightly scaling — proportional to how much cash moved from raw variant price to composed price
   const rawAfterStc = variant?.price_after_stc ?? 0
   const rawFortnightly = variant?.fortnightly_repay ?? 0
   const fortnightly = rawAfterStc > 0 ? rawFortnightly * (afterStc / rawAfterStc) : 0
@@ -589,7 +674,7 @@ export default function QuoteBuilder() {
   }
 
   const saveQuote = async () => {
-    if (!matchedPackage) {
+    if (!matchedPackage && !isHwhpOnly) {
       console.error('Cannot save: no matched package')
       return
     }
@@ -607,16 +692,16 @@ export default function QuoteBuilder() {
         user_id: profile.id,
         nickname: saveNickname.trim() || null,
         customer_name: saveCustomerName.trim() || null,
-        package_id: matchedPackage.id,
+        package_id: matchedPackage?.id ?? null,
         product_set: productSet,
         brand: includesBattery ? brand : null,
         battery_kwh: includesBattery ? batteryKwh : null,
         panel_count: includesSolar ? panels : null,
         inverter_phase: showPhaseFilter ? inverterPhase : null,
         inverter_paralleled: showParalleledFilter ? inverterParalleled : null,
-        hwhp_litres: includesHwhp ? hwhpLitres : null,
-        hvac_type: includesHvac ? hvacType : null,
-        hvac_kw: includesHvac ? hvacKw : null,
+        hwhp_litres: null,
+        hvac_type: null,
+        hvac_kw: null,
         territory,
         zone,
         finance_term: financeTerm,
@@ -628,7 +713,7 @@ export default function QuoteBuilder() {
         is_inbound_pricing: true,
         // Snapshot of the panel model shown to the customer at sell-time
         // (may differ from packages.panel_model due to inbound substitution rules)
-        panel_model_display: includesSolar && matchedPackage.panel_model
+        panel_model_display: includesSolar && matchedPackage?.panel_model
           ? displayPanelModel(matchedPackage.panel_model)
           : null,
         pricing_version_id: pricingVersionId,
@@ -674,11 +759,14 @@ export default function QuoteBuilder() {
     return match ? match[0] : null
   })()
 
+  const isHwhpOnly = productSet === 'HWHP Only'
+  const canQuote = !!matchedPackage || isHwhpOnly
+
   const packageDescription = [
     includesBattery ? `${brand}-${batteryKwh}kWh battery` : null,
     includesSolar && panels > 0 ? `${systemSize}kW PV` : null,
-    includesHwhp ? `${hwhpLitres}L ${hwhpModel}` : null,
-    includesHvac ? `${hvacKw}kW ${hvacType}` : null,
+    includesHwhp && selectedHwhp ? selectedHwhp.model : null,
+    includesHvac && selectedHvac ? selectedHvac.model : null,
     inverterCode ? `${inverterCode}${inverterParalleled ? ' ×2 paralleled' : ''}` : null,
   ].filter(Boolean).join(' + ') || 'Nothing selected'
 
@@ -822,34 +910,47 @@ export default function QuoteBuilder() {
 
               {includesHwhp && (
                 <>
-                  <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">HWHP tank</label>
-                  <select value={hwhpLitres} onChange={e => setHwhpLitres(Number(e.target.value))}
+                  <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">HWHP model</label>
+                  <select value={selectedHwhpId ?? ''} onChange={e => setSelectedHwhpId(Number(e.target.value))}
                     className="h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm">
-                    {availableHwhpLitres.map(l => <option key={l} value={l}>{l}L</option>)}
+                    {hwhpProducts.length === 0 ? (
+                      <option value="">No HWHP models configured</option>
+                    ) : (
+                      hwhpProducts.map(h => <option key={h.id} value={h.id}>{h.model}</option>)
+                    )}
                   </select>
                 </>
               )}
 
-              {includesHvac && (
-                <>
-                  <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">HVAC type</label>
-                  <select value={hvacType} onChange={e => setHvacType(e.target.value)}
-                    className="h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm">
-                    {availableHvacTypes.map(t => <option key={t}>{t}</option>)}
-                  </select>
-
-                  <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">HVAC capacity</label>
-                  <select value={hvacKw} onChange={e => setHvacKw(Number(e.target.value))}
-                    className="h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm">
-                    {availableHvacKws.map(k => <option key={k} value={k}>{k} kW</option>)}
-                  </select>
-                </>
-              )}
+              <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">HVAC</label>
+              <div className="flex items-center gap-2 min-w-0">
+                <label className="flex items-center gap-2 cursor-pointer flex-shrink-0 pl-1 pr-1.5">
+                  <input
+                    type="checkbox"
+                    checked={isHvacIncluded}
+                    onChange={e => setIsHvacIncluded(e.target.checked)}
+                    className="w-4 h-4 accent-blue-600 dark:accent-blue-400"
+                  />
+                  <span className="text-xs text-gray-600 dark:text-gray-400 select-none">Add</span>
+                </label>
+                <select
+                  value={selectedHvacId ?? ''}
+                  onChange={e => setSelectedHvacId(Number(e.target.value))}
+                  disabled={!isHvacIncluded || hvacProducts.length === 0}
+                  className="flex-1 min-w-0 h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm disabled:bg-gray-50 dark:disabled:bg-gray-900/50 disabled:text-gray-400 dark:disabled:text-gray-600 disabled:cursor-not-allowed"
+                >
+                  {hvacProducts.length === 0 ? (
+                    <option value="">No HVAC models configured</option>
+                  ) : (
+                    hvacProducts.map(h => <option key={h.id} value={h.id}>{h.model}</option>)
+                  )}
+                </select>
+              </div>
 
               <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Package</label>
               <div className="flex flex-col md:flex-row md:items-center gap-1.5 md:gap-2 min-w-0">
                 <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded break-all md:break-normal">
-                  {matchedPackage?.package_code ?? 'No match'}
+                  {productSet === 'HWHP Only' ? 'HWHP Only (add-on)' : (matchedPackage?.package_code ?? 'No match')}
                 </code>
                 <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500 md:truncate">{packageDescription}</span>
               </div>
@@ -979,11 +1080,11 @@ export default function QuoteBuilder() {
               </p>
             )}
 
-            {matchedPackage && (
+            {(matchedPackage || (includesHwhp && selectedHwhp) || (includesHvac && selectedHvac)) && (
               <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
                 <p className="text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-500 mb-2">Specifications</p>
                 <div className="space-y-2">
-                  {includesBattery && (
+                  {includesBattery && matchedPackage && (
                     <SpecGroup title="Battery">
                       <SpecRow label="Brand" value={matchedPackage.brand} />
                       <SpecRow label="Capacity" value={`${matchedPackage.battery_kwh ?? '—'} kWh`} />
@@ -1001,7 +1102,7 @@ export default function QuoteBuilder() {
                     </SpecGroup>
                   )}
 
-                  {includesSolar && (
+                  {includesSolar && matchedPackage && (
                     <SpecGroup title="Solar">
                       <SpecRow label="Panels" value={matchedPackage.panel_count ? `${matchedPackage.panel_count} ×` : '—'} />
                       <SpecRow label="Panel model" value={displayPanelModel(matchedPackage.panel_model)} />
@@ -1014,17 +1115,17 @@ export default function QuoteBuilder() {
                     </SpecGroup>
                   )}
 
-                  {includesHwhp && (
+                  {includesHwhp && selectedHwhp && (
                     <SpecGroup title="Hot water heat pump">
-                      <SpecRow label="Tank" value={`${hwhpLitres}L`} />
-                      <SpecRow label="Model" value={hwhpModel} />
+                      <SpecRow label="Model" value={selectedHwhp.model} />
+                      {selectedHwhp.brand && <SpecRow label="Brand" value={selectedHwhp.brand} />}
                     </SpecGroup>
                   )}
 
-                  {includesHvac && (
+                  {includesHvac && selectedHvac && (
                     <SpecGroup title="HVAC">
-                      <SpecRow label="Type" value={hvacType} />
-                      <SpecRow label="Capacity" value={`${hvacKw} kW`} />
+                      <SpecRow label="Model" value={selectedHvac.model} />
+                      {selectedHvac.brand && <SpecRow label="Brand" value={selectedHvac.brand} />}
                     </SpecGroup>
                   )}
                 </div>
@@ -1041,7 +1142,7 @@ export default function QuoteBuilder() {
             </div>
 
             <div className="mt-3.5 space-y-1.5">
-              {matchedPackage ? (
+              {canQuote ? (
                 <button
                   onClick={() => setShowSaveDialog(true)}
                   className="hidden md:flex w-full py-2 text-sm border rounded-md transition-colors items-center justify-center gap-1.5 bg-gray-900 dark:bg-gray-700 text-white border-gray-900 dark:border-gray-700 hover:bg-gray-800 dark:hover:bg-gray-600"
@@ -1290,7 +1391,7 @@ export default function QuoteBuilder() {
       {/* Sticky bottom bar - mobile only */}
       <div className="fixed bottom-0 left-0 right-0 md:hidden bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-3 py-2.5 flex items-center gap-3 shadow-lg z-40">
         <div className="flex-1 min-w-0">
-          {matchedPackage ? (
+          {canQuote ? (
             <>
               <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-tight">
                 {financeTerm === 'Cash' ? 'Total (inc GST)' : `BNPL ${financeTerm} · $${Math.round(fortnightly)}/fn`}
@@ -1304,7 +1405,7 @@ export default function QuoteBuilder() {
             </>
           )}
         </div>
-        {matchedPackage ? (
+        {canQuote ? (
           <button
             onClick={() => setShowSaveDialog(true)}
             className="px-4 py-2.5 bg-gray-900 dark:bg-gray-700 text-white rounded-md text-sm font-medium flex items-center gap-1.5 min-h-[44px]"
