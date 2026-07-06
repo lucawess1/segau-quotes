@@ -20,7 +20,7 @@ type MergeResult = {
 }
 
 type StagingTable = {
-  key: 'packages' | 'price_variants' | 'discounts'
+  key: 'packages' | 'price_variants' | 'discounts' | 'hwhp_products' | 'hvac_products'
   label: string
   tableName: string
   functionName: string
