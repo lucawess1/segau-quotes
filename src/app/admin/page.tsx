@@ -62,6 +62,20 @@ const STAGING_TABLES: StagingTable[] = [
     functionName: 'merge_discounts',
     description: 'Upsert inbound and ASC discount amounts.',
   },
+  {
+    key: 'hwhp_products',
+    label: 'HWHP products',
+    tableName: 'hwhp_products_staging',
+    functionName: 'merge_hwhp_products',
+    description: 'Upsert HWHP add-on models (code, brand, model, cost_metro, cost_regional, stc_value, active).',
+  },
+  {
+    key: 'hvac_products',
+    label: 'HVAC products',
+    tableName: 'hvac_products_staging',
+    functionName: 'merge_hvac_products',
+    description: 'Upsert HVAC add-on models (code, brand, model, cost_metro, cost_regional, active).',
+  },
 ]
 
 function formatDateTime(iso: string): string {
@@ -547,7 +561,8 @@ export default function AdminPage() {
             <li>Take a packages snapshot if making structural changes (e.g. retiring old products)</li>
             <li>Packages first (so price_variants can match by package_code)</li>
             <li>Price variants second (creates a new labelled pricing version)</li>
-            <li>Discounts last (matches by package_code, needs packages in place)</li>
+            <li>Discounts (matches by package_code, needs packages in place)</li>
+            <li>HWHP / HVAC products — standalone, can be run any time</li>
           </ol>
         </div>
       </main>
