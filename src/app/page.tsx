@@ -881,27 +881,29 @@ export default function QuoteBuilder() {
                 </>
               )}
 
-              <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">HVAC add-on</label>
-              <div className="flex flex-col gap-2">
-                <label className="flex items-center gap-2 cursor-pointer">
+              <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">HVAC</label>
+              <div className="flex items-center gap-2 min-w-0">
+                <label className="flex items-center gap-2 cursor-pointer flex-shrink-0 pl-1 pr-1.5">
                   <input
                     type="checkbox"
                     checked={isHvacIncluded}
                     onChange={e => setIsHvacIncluded(e.target.checked)}
-                    className="w-4 h-4"
+                    className="w-4 h-4 accent-blue-600 dark:accent-blue-400"
                   />
-                  <span className="text-sm">Add HVAC to this quote</span>
+                  <span className="text-xs text-gray-600 dark:text-gray-400 select-none">Add</span>
                 </label>
-                {isHvacIncluded && (
-                  <select value={selectedHvacId ?? ''} onChange={e => setSelectedHvacId(Number(e.target.value))}
-                    className="h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm">
-                    {hvacProducts.length === 0 ? (
-                      <option value="">No HVAC models configured</option>
-                    ) : (
-                      hvacProducts.map(h => <option key={h.id} value={h.id}>{h.model}</option>)
-                    )}
-                  </select>
-                )}
+                <select
+                  value={selectedHvacId ?? ''}
+                  onChange={e => setSelectedHvacId(Number(e.target.value))}
+                  disabled={!isHvacIncluded || hvacProducts.length === 0}
+                  className="flex-1 min-w-0 h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm disabled:bg-gray-50 dark:disabled:bg-gray-900/50 disabled:text-gray-400 dark:disabled:text-gray-600 disabled:cursor-not-allowed"
+                >
+                  {hvacProducts.length === 0 ? (
+                    <option value="">No HVAC models configured</option>
+                  ) : (
+                    hvacProducts.map(h => <option key={h.id} value={h.id}>{h.model}</option>)
+                  )}
+                </select>
               </div>
 
               <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Package</label>
