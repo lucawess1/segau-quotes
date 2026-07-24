@@ -47,23 +47,25 @@ function isCompatibleInverterUpgrade(u: InverterUpgrade, pkg: Package | undefine
   if (!pkg) return false
   // Brand only matters for battery-inverter upgrades — Solar Only PV-inverter upgrades aren't brand-locked.
   if (sel.includesBattery && u.brand !== pkg.brand) return false
-  // Exact match against the inverter this upgrade actually replaces, when specified. This is strictly
-  // more precise than phase/paralleled/size — those describe the *new* inverter's spec (which can differ
-  // from the current one: phase-converting upgrades change phase, and a replacement's sizing sweet spot
-  // reflects the new unit, not the old one), not a requirement on the current package. So once we have an
-  // exact previous-inverter match, skip them; they're only useful as coarse fallback discriminators when
-  // no previous_inverter_model was given.
+  // Exact match against the inverter this upgrade actually replaces, when specified. This is more
+  // precise than phase/paralleled for disambiguation — phase-converting upgrades (e.g. Sungrow
+  // 1PH→3PH) change phase, so phase/paralleled describe the *new* inverter, not a requirement on the
+  // current one, and are skipped once we have an exact previous-inverter match. Size is NOT skipped
+  // here though: some upgrades share one previous_inverter_model across many battery sizes (e.g.
+  // Alpha's G3-T10→T20 upgrade applies to every 3-phase Alpha size), so previous_inverter_model alone
+  // doesn't disambiguate eligibility — min/max size is the only thing gating which sizes qualify.
   if (u.previous_inverter_model) {
     const currentInverter = sel.includesBattery ? pkg.battery_inverter : pkg.pv_inverter
     if (currentInverter !== u.previous_inverter_model) return false
   } else {
     if (u.inverter_phase && sel.inverterPhase !== u.inverter_phase) return false
     if (u.paralleled && !sel.inverterParalleled) return false
-    // Size range: battery kWh when there's a battery, PV system kW (Solar Only) otherwise.
-    const sizeValue = sel.includesBattery ? sel.batteryKwh : sel.systemSizeKw
-    if (u.min_size != null && sizeValue < u.min_size) return false
-    if (u.max_size != null && sizeValue > u.max_size) return false
   }
+  // Size range: battery kWh when there's a battery, PV system kW (Solar Only) otherwise. Always
+  // enforced as a current-system eligibility threshold, regardless of previous_inverter_model.
+  const sizeValue = sel.includesBattery ? sel.batteryKwh : sel.systemSizeKw
+  if (u.min_size != null && sizeValue < u.min_size) return false
+  if (u.max_size != null && sizeValue > u.max_size) return false
   if (u.compatible_product_sets && !u.compatible_product_sets.includes(sel.productSet)) return false
   return true
 }
