@@ -20,7 +20,7 @@ type MergeResult = {
 }
 
 type StagingTable = {
-  key: 'packages' | 'price_variants' | 'discounts' | 'hwhp_products' | 'hvac_products'
+  key: 'packages' | 'price_variants' | 'discounts' | 'hwhp_products' | 'hvac_products' | 'inverter_upgrades'
   label: string
   tableName: string
   functionName: string
@@ -75,6 +75,13 @@ const STAGING_TABLES: StagingTable[] = [
     tableName: 'hvac_products_staging',
     functionName: 'merge_hvac_products',
     description: 'Upsert HVAC add-on models (code, brand, model, cost_metro, cost_regional, active).',
+  },
+  {
+    key: 'inverter_upgrades',
+    label: 'Inverter upgrades',
+    tableName: 'inverter_upgrades_staging',
+    functionName: 'merge_inverter_upgrades',
+    description: 'Upsert inverter upgrade options (code, brand, model, compatibility filters, price + per-channel discounts).',
   },
 ]
 

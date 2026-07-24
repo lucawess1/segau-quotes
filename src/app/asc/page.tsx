@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Package, PriceVariant, Extra } from '@/lib/supabase'
 import { Zap, User, Plus, X, Save, Info, Check, History, LogOut } from 'lucide-react'
@@ -28,6 +28,46 @@ type Discount = {
 type HwhpProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; stc_value: number; inbound_discount: number; asc_discount: number; active: boolean }
 type HvacProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; inbound_discount: number; asc_discount: number; active: boolean }
 type RetailConfig = { hwhp_combo_discount: number }
+type InverterUpgrade = {
+  id: number; code: string; brand: string; inverter_model: string
+  previous_inverter_model: string | null
+  inverter_phase: string | null; paralleled: boolean
+  min_size: number | null; max_size: number | null
+  compatible_product_sets: string[] | null
+  price_upgrade: number; inbound_discount: number; asc_discount: number
+  description: string | null; active: boolean
+}
+
+// An upgrade replaces the battery inverter when a battery is present, otherwise the PV inverter
+// (Solar Only 3-phase upgrades exist too) — so compatibility is checked against the matched package
+// rather than the (hidden, stale) battery-brand state when there's no battery.
+function isCompatibleInverterUpgrade(u: InverterUpgrade, pkg: Package | undefined, sel: {
+  productSet: string; batteryKwh: number; systemSizeKw: number; includesBattery: boolean
+  inverterPhase: string; inverterParalleled: boolean
+}): boolean {
+  if (!pkg) return false
+  // Brand only matters for battery-inverter upgrades — Solar Only PV-inverter upgrades aren't brand-locked.
+  if (sel.includesBattery && u.brand !== pkg.brand) return false
+  // Exact match against the inverter this upgrade actually replaces, when specified. This is strictly
+  // more precise than phase/paralleled/size — those describe the *new* inverter's spec (which can differ
+  // from the current one: phase-converting upgrades change phase, and a replacement's sizing sweet spot
+  // reflects the new unit, not the old one), not a requirement on the current package. So once we have an
+  // exact previous-inverter match, skip them; they're only useful as coarse fallback discriminators when
+  // no previous_inverter_model was given.
+  if (u.previous_inverter_model) {
+    const currentInverter = sel.includesBattery ? pkg.battery_inverter : pkg.pv_inverter
+    if (currentInverter !== u.previous_inverter_model) return false
+  } else {
+    if (u.inverter_phase && sel.inverterPhase !== u.inverter_phase) return false
+    if (u.paralleled && !sel.inverterParalleled) return false
+    // Size range: battery kWh when there's a battery, PV system kW (Solar Only) otherwise.
+    const sizeValue = sel.includesBattery ? sel.batteryKwh : sel.systemSizeKw
+    if (u.min_size != null && sizeValue < u.min_size) return false
+    if (u.max_size != null && sizeValue > u.max_size) return false
+  }
+  if (u.compatible_product_sets && !u.compatible_product_sets.includes(sel.productSet)) return false
+  return true
+}
 
 // Minimal Quote shape used by the recent quotes list (matches the columns we select)
 type SavedQuote = {
@@ -41,6 +81,7 @@ type SavedQuote = {
   panel_count: number | null
   territory: string | null
   zone: number | null
+  postcode: string | null
   finance_term: string | null
   total_price: number | null
   created_at: string | null
@@ -92,13 +133,62 @@ export default function QuoteBuilder() {
   // (X1-P*** = AC-only, X1-H*** = Hybrid). Default to AC-only since that's most common for Battery Only deals.
   const [inverterType, setInverterType] = useState<'AC-only' | 'Hybrid'>('AC-only')
 
-  const [territory, setTerritory] = useState<'Metro' | 'Regional'>('Metro')
-  const [zone, setZone] = useState(3)
+  // Fallback-only manual Territory/Zone — used when no postcode is entered, or the postcode
+  // isn't recognised. When a postcode resolves, its lookup result takes over (see `territory`/`zone` below).
+  const [manualTerritory, setManualTerritory] = useState<'Metro' | 'Regional'>('Metro')
+  const [manualZone, setManualZone] = useState(3)
+  const [postcode, setPostcode] = useState('')
+  const [postcodeLookupResult, setPostcodeLookupResult] = useState<{
+    territory: 'Metro' | 'Regional'
+    zone: number
+    suburb: string | null
+  } | null>(null)
+  const [postcodeNotFound, setPostcodeNotFound] = useState(false)
+  const postcodeError = postcode.length > 0 && !/^\d{4}$/.test(postcode)
+
+  const territory = postcodeLookupResult?.territory ?? manualTerritory
+  const zone = postcodeLookupResult?.zone ?? manualZone
+
+  useEffect(() => {
+    if (!/^\d{4}$/.test(postcode)) {
+      setPostcodeLookupResult(null)
+      setPostcodeNotFound(false)
+      return
+    }
+    let cancelled = false
+    supabase
+      .from('postcode_lookup')
+      .select('territory, stc_zone, suburb')
+      .eq('postcode', postcode)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return
+        if (data) {
+          setPostcodeLookupResult({ territory: data.territory as 'Metro' | 'Regional', zone: data.stc_zone, suburb: data.suburb })
+          setPostcodeNotFound(false)
+        } else {
+          setPostcodeLookupResult(null)
+          setPostcodeNotFound(true)
+        }
+      })
+    return () => { cancelled = true }
+  }, [postcode])
+
   // ASC partner only offers Cash and 60m finance options (no 84m)
   const [financeTerm, setFinanceTerm] = useState<'Cash' | '60m'>('Cash')
 
   const [selectedExtras, setSelectedExtras] = useState<QuoteExtra[]>([])
   const [showExtraPicker, setShowExtraPicker] = useState(false)
+  const [extraSearchQuery, setExtraSearchQuery] = useState('')
+  const extraPickerRef = useRef<HTMLDivElement>(null)
+
+  // Scroll the picker into view when opened, so the mobile on-screen keyboard (triggered by the
+  // search input's autoFocus) doesn't cover the search box or results list below it.
+  useEffect(() => {
+    if (!showExtraPicker) return
+    const id = setTimeout(() => extraPickerRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 100)
+    return () => clearTimeout(id)
+  }, [showExtraPicker])
 
   // Save dialog + recent quotes list
   const [showSaveDialog, setShowSaveDialog] = useState(false)
@@ -131,6 +221,8 @@ export default function QuoteBuilder() {
   const [selectedHwhpId, setSelectedHwhpId] = useState<number | null>(null)
   const [isHvacIncluded, setIsHvacIncluded] = useState<boolean>(false)
   const [selectedHvacId, setSelectedHvacId] = useState<number | null>(null)
+  const [inverterUpgrades, setInverterUpgrades] = useState<InverterUpgrade[]>([])
+  const [selectedInverterUpgradeId, setSelectedInverterUpgradeId] = useState<number | null>(null)
 
   const includesBattery = HAS_BATTERY.includes(productSet)
   const includesSolar = HAS_SOLAR.includes(productSet)
@@ -159,12 +251,14 @@ export default function QuoteBuilder() {
   }, [])
 
   const loadAddOnProducts = async () => {
-    const [hwhpRes, hvacRes, cfgRes] = await Promise.all([
+    const [hwhpRes, hvacRes, cfgRes, inverterUpgradeRes] = await Promise.all([
       supabase.from('hwhp_products').select('*').eq('active', true).order('model'),
       supabase.from('hvac_products').select('*').eq('active', true).order('model'),
       supabase.from('retail_config').select('*').eq('id', 1).single(),
+      supabase.from('inverter_upgrades').select('*').eq('active', true).order('inverter_model'),
     ])
     if (hwhpRes.data) setHwhpProducts(hwhpRes.data as HwhpProduct[])
+    if (inverterUpgradeRes.data) setInverterUpgrades(inverterUpgradeRes.data as InverterUpgrade[])
     if (hvacRes.data) {
       const sorted = [...(hvacRes.data as HvacProduct[])].sort((a, b) => {
         const aDucted = a.model.toLowerCase().includes('ducted') ? 1 : 0
@@ -291,7 +385,7 @@ export default function QuoteBuilder() {
     // We just fetch — the database returns what the user is allowed to see.
     const { data, error } = await supabase
       .from('quotes')
-      .select('id, quote_number, nickname, customer_name, product_set, brand, battery_kwh, panel_count, territory, zone, finance_term, total_price, created_at')
+      .select('id, quote_number, nickname, customer_name, product_set, brand, battery_kwh, panel_count, territory, zone, postcode, finance_term, total_price, created_at')
       .order('created_at', { ascending: false })
       .limit(20)
     if (error) console.error('Failed to load recent quotes:', error)
@@ -496,6 +590,28 @@ export default function QuoteBuilder() {
     return true
   })
 
+  // Inverter upgrade: shown whenever there's an inverter to upgrade at all (battery or solar-only PV).
+  const showInverterUpgrade = includesBattery || includesSolar
+  // PV system size in kW — used as the size axis for Solar Only upgrades (battery kWh is used instead when a battery is present).
+  const systemSizeKw = matchedPackage?.system_size_kw ?? panels * 0.44
+  const compatibleInverterUpgrades = useMemo(() => {
+    if (!showInverterUpgrade) return []
+    return inverterUpgrades.filter(u => isCompatibleInverterUpgrade(u, matchedPackage, {
+      productSet, batteryKwh, systemSizeKw, includesBattery, inverterPhase, inverterParalleled,
+    }))
+  }, [inverterUpgrades, matchedPackage, productSet, batteryKwh, systemSizeKw, includesBattery, inverterPhase, inverterParalleled, showInverterUpgrade])
+
+  // Clear the upgrade selection whenever it falls out of compatibility (brand switch, battery-size
+  // switch, product-set switch, phase switch, etc.) — mirrors the HWHP/HVAC clear-on-change pattern.
+  useEffect(() => {
+    if (selectedInverterUpgradeId && !compatibleInverterUpgrades.some(u => u.id === selectedInverterUpgradeId)) {
+      setSelectedInverterUpgradeId(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [compatibleInverterUpgrades, selectedInverterUpgradeId])
+
+  const selectedInverterUpgrade = inverterUpgrades.find(u => u.id === selectedInverterUpgradeId) ?? null
+
   // Fetch price variants for the matched package on demand.
   // Cached so re-selecting a previously-fetched package is instant.
   useEffect(() => {
@@ -540,6 +656,12 @@ export default function QuoteBuilder() {
     return sum + (e.charge_type === 'Per Panel' ? e.unit_price * panels : e.unit_price)
   }, 0)
 
+  const filteredExtras = useMemo(() => {
+    const q = extraSearchQuery.trim().toLowerCase()
+    if (!q) return extras
+    return extras.filter(e => e.name.toLowerCase().includes(q) || e.category.toLowerCase().includes(q))
+  }, [extras, extraSearchQuery])
+
   // Compose the CASH price from base package + HWHP + HVAC add-ons.
   // ASC uses asc_discount (which can be negative — a markup, e.g. -$200 for HWHP/HVAC).
 
@@ -568,12 +690,16 @@ export default function QuoteBuilder() {
   // $600 HWHP combo discount fires only when HWHP is paired with a non-HWHP base
   const hwhpComboDiscount = includesHwhp && hasNonHwhpBase ? retailConfig.hwhp_combo_discount : 0
 
+  // Inverter upgrade: flat $ on top, own ASC discount (may be negative = markup). STC unaffected.
+  const upgradeCost = selectedInverterUpgrade?.price_upgrade ?? 0
+  const upgradeAscDiscount = selectedInverterUpgrade?.asc_discount ?? 0
+
   // Combined cash-after-STC (before ASC discount adjustments)
   const combinedCashAfterStcPreDiscount =
-    baseCashAfterStc + (hwhpCost - hwhpStc) + hvacCost - hwhpComboDiscount
+    baseCashAfterStc + (hwhpCost - hwhpStc) + hvacCost + upgradeCost - hwhpComboDiscount
 
-  // Total ASC discount = base + HWHP + HVAC (sum, since ASC HWHP/HVAC are negative → increases price)
-  const inboundDiscount = baseInboundDiscount + hwhpAscDiscount + hvacAscDiscount
+  // Total ASC discount = base + HWHP + HVAC + upgrade (sum, since ASC amounts can be negative → increases price)
+  const inboundDiscount = baseInboundDiscount + hwhpAscDiscount + hvacAscDiscount + upgradeAscDiscount
 
   const stc = baseStc + hwhpStc
   const cashAfterStc = combinedCashAfterStcPreDiscount
@@ -596,6 +722,7 @@ export default function QuoteBuilder() {
   const addExtra = (e: Extra) => {
     setSelectedExtras([...selectedExtras, { ...e, instanceId: crypto.randomUUID() }])
     setShowExtraPicker(false)
+    setExtraSearchQuery('')
   }
 
   const removeExtra = (instanceId: string) => {
@@ -679,6 +806,7 @@ export default function QuoteBuilder() {
         hwhp_litres: null,
         hvac_type: null,
         hvac_kw: null,
+        postcode: postcode || null,
         territory,
         zone,
         finance_term: financeTerm,
@@ -689,6 +817,7 @@ export default function QuoteBuilder() {
         status: 'draft',
         is_asc_pricing: true,
         pricing_version_id: pricingVersionId,
+        inverter_upgrade_id: selectedInverterUpgradeId,
       })
       .select()
       .single()
@@ -740,6 +869,7 @@ export default function QuoteBuilder() {
     includesHwhp && selectedHwhp ? selectedHwhp.model : null,
     includesHvac && selectedHvac ? selectedHvac.model : null,
     inverterCode ? `${inverterCode}${inverterParalleled ? ' ×2 paralleled' : ''}` : null,
+    selectedInverterUpgrade ? `${selectedInverterUpgrade.inverter_model} (upgraded)` : null,
   ].filter(Boolean).join(' + ') || 'Nothing selected'
 
   return (
@@ -765,11 +895,26 @@ export default function QuoteBuilder() {
           <div className="min-w-0 flex items-center gap-2">
             <p className="font-medium text-sm md:text-[15px] truncate">SEG Pricing Builder</p>
             <span className="text-[10px] uppercase tracking-wider font-bold bg-teal-500 dark:bg-teal-600 text-white px-2 py-0.5 rounded">
-              Inbound
+              ASC
             </span>
           </div>
         </div>
         <div className="flex items-center gap-1 md:gap-3 flex-shrink-0">
+          {profile && (
+            <select
+              value="/asc"
+              onChange={e => { if (e.target.value) window.location.href = e.target.value }}
+              className="h-8 px-2 text-xs border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900"
+              aria-label="Switch pricing mode"
+              title="Switch pricing mode"
+            >
+              <option value="/">Standard</option>
+              {(profile.teams?.includes('inbound') || profile.role === 'admin') && (
+                <option value="/inbound">Inbound</option>
+              )}
+              <option value="/asc">ASC</option>
+            </select>
+          )}
           <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500 max-w-[120px] md:max-w-none">
             <User className="w-3.5 h-3.5 flex-shrink-0" />
             <span className="truncate">
@@ -880,6 +1025,34 @@ export default function QuoteBuilder() {
                 </>
               )}
 
+              {showInverterUpgrade && (
+                <>
+                  <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Inverter</label>
+                  {compatibleInverterUpgrades.length === 0 ? (
+                    <div className="h-11 md:h-9 px-3 flex items-center border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400 text-base md:text-sm cursor-not-allowed">
+                      {(includesBattery ? matchedPackage?.battery_inverter : matchedPackage?.pv_inverter) || 'Standard'}
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedInverterUpgradeId ?? ''}
+                      onChange={e => setSelectedInverterUpgradeId(e.target.value ? Number(e.target.value) : null)}
+                      className="h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm"
+                    >
+                      <option value="">
+                        {(includesBattery ? matchedPackage?.battery_inverter : matchedPackage?.pv_inverter)
+                          ? `${includesBattery ? matchedPackage?.battery_inverter : matchedPackage?.pv_inverter} - default`
+                          : 'Standard - default'}
+                      </option>
+                      {compatibleInverterUpgrades.map(u => (
+                        <option key={u.id} value={u.id}>
+                          Upgrade to {u.inverter_model}  ·  +{formatCurrency(u.price_upgrade)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </>
+              )}
+
               {includesHwhp && (
                 <>
                   <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">HWHP model</label>
@@ -931,20 +1104,56 @@ export default function QuoteBuilder() {
             <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
               <p className="text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-500 mb-2">2. Site & finance</p>
               <div className="flex flex-col gap-3 text-sm md:grid md:grid-cols-[110px_1fr] md:gap-x-3 md:gap-y-2.5 md:items-center">
-                <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Territory</label>
-                <SegmentedControl
-                  value={territory}
-                  options={['Metro', 'Regional']}
-                  onChange={v => setTerritory(v as 'Metro' | 'Regional')}
-                />
+                <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Postcode</label>
+                <div>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={4}
+                    value={postcode}
+                    onChange={e => setPostcode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="e.g. 2000"
+                    className="h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm w-full md:w-32"
+                  />
+                  {postcodeError && (
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">Enter a valid 4-digit postcode</p>
+                  )}
+                  {postcodeLookupResult && (
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <span className="text-xs font-medium px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300">
+                        {postcodeLookupResult.territory}
+                      </span>
+                      <span className="text-xs font-medium px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300">
+                        Zone {postcodeLookupResult.zone}
+                      </span>
+                      {postcodeLookupResult.suburb && (
+                        <span className="text-xs text-gray-400 dark:text-gray-500">{postcodeLookupResult.suburb}</span>
+                      )}
+                    </div>
+                  )}
+                  {postcodeNotFound && (
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">Postcode not recognised — enter Territory and Zone manually below</p>
+                  )}
+                </div>
 
-                <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">STC zone</label>
-                <SegmentedControl
-                  value={String(zone)}
-                  options={['1', '2', '3', '4']}
-                  labelPrefix="ZN"
-                  onChange={v => setZone(Number(v))}
-                />
+                {!postcodeLookupResult && (
+                  <>
+                    <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Territory</label>
+                    <SegmentedControl
+                      value={manualTerritory}
+                      options={['Metro', 'Regional']}
+                      onChange={v => setManualTerritory(v as 'Metro' | 'Regional')}
+                    />
+
+                    <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">STC zone</label>
+                    <SegmentedControl
+                      value={String(manualZone)}
+                      options={['1', '2', '3', '4']}
+                      labelPrefix="ZN"
+                      onChange={v => setManualZone(Number(v))}
+                    />
+                  </>
+                )}
 
                 <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Finance</label>
                 <SegmentedControl
@@ -959,37 +1168,51 @@ export default function QuoteBuilder() {
             <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-500">3. Extras</p>
-                <button onClick={() => setShowExtraPicker(!showExtraPicker)}
+                <button onClick={() => { setShowExtraPicker(!showExtraPicker); setExtraSearchQuery('') }}
                   className="text-xs px-2.5 py-1 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1">
                   <Plus className="w-3 h-3" /> Add
                 </button>
               </div>
 
               {showExtraPicker && (
-                <div className="mb-2 border border-gray-200 dark:border-gray-700 rounded-md p-2 max-h-48 overflow-y-auto text-sm">
-                  {extrasStatus === 'pending' && extras.length === 0 ? (
-                    <p className="text-xs text-gray-400 dark:text-gray-500 italic py-2 px-1 text-center">Loading extras…</p>
-                  ) : extrasStatus === 'error' && extras.length === 0 ? (
-                    <div className="py-2 px-1 text-center">
-                      <p className="text-xs text-red-600 dark:text-red-400 mb-1.5">Couldn't load extras.</p>
-                      <button
-                        onClick={() => { setExtrasStatus('pending'); loadExtrasWithCache() }}
-                        className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                      >
-                        Retry
-                      </button>
-                    </div>
-                  ) : (
-                    extras.map(e => (
-                      <button key={e.id} onClick={() => addExtra(e)}
-                        className="w-full text-left px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex justify-between items-center">
-                        <span>{e.name}</span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">
-                          {e.charge_type === 'Per Panel' ? `$${e.unit_price}/panel` : formatCurrency(e.unit_price)}
-                        </span>
-                      </button>
-                    ))
+                <div ref={extraPickerRef} className="mb-2 border border-gray-200 dark:border-gray-700 rounded-md p-2 text-sm">
+                  {extrasStatus !== 'error' && extras.length > 0 && (
+                    <input
+                      type="text"
+                      value={extraSearchQuery}
+                      onChange={e => setExtraSearchQuery(e.target.value)}
+                      placeholder="Search extras…"
+                      autoFocus
+                      className="w-full mb-2 px-2.5 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 focus:outline-none focus:border-gray-400 dark:focus:border-gray-500"
+                    />
                   )}
+                  <div className="max-h-48 overflow-y-auto">
+                    {extrasStatus === 'pending' && extras.length === 0 ? (
+                      <p className="text-xs text-gray-400 dark:text-gray-500 italic py-2 px-1 text-center">Loading extras…</p>
+                    ) : extrasStatus === 'error' && extras.length === 0 ? (
+                      <div className="py-2 px-1 text-center">
+                        <p className="text-xs text-red-600 dark:text-red-400 mb-1.5">Couldn't load extras.</p>
+                        <button
+                          onClick={() => { setExtrasStatus('pending'); loadExtrasWithCache() }}
+                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    ) : filteredExtras.length === 0 ? (
+                      <p className="text-xs text-gray-400 dark:text-gray-500 italic py-2 px-1 text-center">No extras match {`"${extraSearchQuery}"`}</p>
+                    ) : (
+                      filteredExtras.map(e => (
+                        <button key={e.id} onClick={() => addExtra(e)}
+                          className="w-full text-left px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex justify-between items-center">
+                          <span>{e.name}</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">
+                            {e.charge_type === 'Per Panel' ? `$${e.unit_price}/panel` : formatCurrency(e.unit_price)}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -1012,7 +1235,7 @@ export default function QuoteBuilder() {
                         </span>
                         <span className="font-medium min-w-[60px] text-right">{formatCurrency(lineTotal)}</span>
                         <button onClick={() => removeExtra(e.instanceId)}
-                          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded" aria-label="Remove">
+                          className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 md:p-1 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 rounded" aria-label="Remove">
                           <X className="w-3 h-3" />
                         </button>
                       </div>
@@ -1064,6 +1287,7 @@ export default function QuoteBuilder() {
                       <SpecRow
                         label="Inverter"
                         value={(() => {
+                          if (selectedInverterUpgrade) return `${selectedInverterUpgrade.inverter_model} (upgraded)`
                           const inv = matchedPackage.battery_inverter ?? inverterCode
                           if (!inv) return inv
                           return matchedPackage.inverter_paralleled ? `${inv} ×2` : inv
@@ -1081,7 +1305,7 @@ export default function QuoteBuilder() {
                       <SpecRow label="System size" value={matchedPackage.system_size_kw ? `${matchedPackage.system_size_kw} kW` : '—'} />
                       <SpecRow
                         label="PV inverter"
-                        value={matchedPackage.pv_inverter}
+                        value={selectedInverterUpgrade && !includesBattery ? `${selectedInverterUpgrade.inverter_model} (upgraded)` : matchedPackage.pv_inverter}
                         fallback="Shared with battery inverter"
                       />
                     </SpecGroup>
@@ -1130,9 +1354,14 @@ export default function QuoteBuilder() {
                 </button>
               )}
               {savedConfirmation && (
-                <div className="text-xs text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-800 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
-                  <Check className="w-3.5 h-3.5 flex-shrink-0" />
-                  Saved as <code className="font-mono">{savedConfirmation}</code>
+                <div className="text-xs text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-800 rounded-md px-2.5 py-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 flex-shrink-0" />
+                    Saved as <code className="font-mono">{savedConfirmation}</code>
+                  </div>
+                  {selectedInverterUpgrade && (
+                    <div className="pl-5">Inverter: Upgraded to {selectedInverterUpgrade.inverter_model}</div>
+                  )}
                 </div>
               )}
               {pricingConfirmation && (
@@ -1194,7 +1423,9 @@ export default function QuoteBuilder() {
                           q.panel_count ? `${q.panel_count}p` : null,
                         ].filter(Boolean).join(' · ')}
                       </td>
-                      <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-300 dark:text-gray-600">{q.territory ? `${q.territory} ZN${q.zone}` : '—'}</td>
+                      <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-300 dark:text-gray-600">
+                        {[q.postcode, q.territory ? `${q.territory} ZN${q.zone}` : null].filter(Boolean).join(' · ') || '—'}
+                      </td>
                       <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-300 dark:text-gray-600">{q.finance_term}</td>
                       <td className="px-3 py-2 text-xs font-medium text-right">{q.total_price !== null ? formatCurrency(q.total_price) : '—'}</td>
                       <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">{formatRelativeDate(q.created_at)}</td>
@@ -1231,6 +1462,7 @@ export default function QuoteBuilder() {
                     <div className="flex items-center justify-between mt-1.5 text-[11px] text-gray-400 dark:text-gray-500">
                       <span className="font-mono">{q.quote_number}</span>
                       <span>
+                        {q.postcode && `${q.postcode} · `}
                         {q.territory && `${q.territory} ZN${q.zone} · `}
                         {q.finance_term} · {formatRelativeDate(q.created_at)}
                       </span>
@@ -1249,7 +1481,7 @@ export default function QuoteBuilder() {
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <p className="font-medium">Save quote</p>
-              <button onClick={() => !saving && setShowSaveDialog(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+              <button onClick={() => !saving && setShowSaveDialog(false)} className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 md:p-1 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 rounded" aria-label="Close">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1314,7 +1546,8 @@ export default function QuoteBuilder() {
               <p className="font-medium">Request pricing</p>
               <button
                 onClick={() => !submittingPricing && setShowPricingDialog(false)}
-                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 md:p-1 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                aria-label="Close"
               >
                 <X className="w-4 h-4" />
               </button>
