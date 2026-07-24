@@ -429,16 +429,30 @@ export default function QuoteBuilder() {
     return Array.from(set).sort()
   }, [setPackages_])
 
+  // Phase is a brand-level choice, not a battery-size-level one: some brands (e.g. Alpha) have
+  // entirely separate battery sizes per phase (5/10/13.9/15/20/25/30kWh = 1PH only,
+  // 9.3/18.6/27.9/37.2/46.5/55.8kWh = 3PH only — no overlap), while others (e.g. ANKER) offer the
+  // same battery size in both phases. Computing phase from the whole brand (not a specific battery
+  // size) covers both cases: for Alpha it drives which sizes even show up; for ANKER it's just
+  // resolved one step earlier than before.
+  const availableBrandPhases = useMemo(() => {
+    if (!includesBattery) return []
+    const set = new Set(setPackages_.filter(p => p.brand === brand).map(p => p.inverter_phase).filter(Boolean) as string[])
+    return Array.from(set).sort()
+  }, [setPackages_, brand, includesBattery])
+
+  const showPhaseFilter = availableBrandPhases.length > 1
+
   const availableBatterySizes = useMemo(() => {
     if (!includesBattery) return []
     const sizes = new Set(
       setPackages_
-        .filter(p => p.brand === brand)
+        .filter(p => p.brand === brand && (!showPhaseFilter || p.inverter_phase === inverterPhase))
         .map(p => p.battery_kwh)
         .filter((s): s is number => s !== null && s !== undefined && s > 0)
     )
     return Array.from(sizes).sort((a, b) => a - b)
-  }, [setPackages_, brand, includesBattery])
+  }, [setPackages_, brand, includesBattery, showPhaseFilter, inverterPhase])
 
   const panelRange = useMemo(() => {
     if (!includesSolar) return { min: 0, max: 0 }
@@ -474,29 +488,23 @@ export default function QuoteBuilder() {
     return Array.from(set).sort((a, b) => a - b) as number[]
   }, [setPackages_, hvacType, includesHvac])
 
-  // Inverter filtering - only shown when more than one option exists for current selection
+  // Inverter filtering - only shown when more than one option exists for current selection.
+  // Phase is already resolved at the brand level above, so candidates here are pre-filtered to it.
   const inverterCandidates = useMemo(() => {
     if (!includesBattery) return []
     return setPackages_.filter(p => {
       if (p.brand !== brand) return false
       if ((p.battery_kwh ?? 0) !== batteryKwh) return false
       if (includesSolar && (p.panel_count ?? 0) !== panels) return false
+      if (showPhaseFilter && p.inverter_phase !== inverterPhase) return false
       return true
     })
-  }, [setPackages_, brand, batteryKwh, panels, includesBattery, includesSolar])
-
-  const availablePhases = useMemo(() => {
-    const set = new Set(inverterCandidates.map(p => p.inverter_phase).filter(Boolean) as string[])
-    return Array.from(set).sort()
-  }, [inverterCandidates])
+  }, [setPackages_, brand, batteryKwh, panels, includesBattery, includesSolar, showPhaseFilter, inverterPhase])
 
   const availableParalleled = useMemo(() => {
-    const matching = availablePhases.length > 1
-      ? inverterCandidates.filter(p => p.inverter_phase === inverterPhase)
-      : inverterCandidates
-    const set = new Set(matching.map(p => p.inverter_paralleled).filter(v => v !== null && v !== undefined) as boolean[])
+    const set = new Set(inverterCandidates.map(p => p.inverter_paralleled).filter(v => v !== null && v !== undefined) as boolean[])
     return Array.from(set).sort()
-  }, [inverterCandidates, availablePhases, inverterPhase])
+  }, [inverterCandidates])
 
   // Classify a battery_inverter model string as 'AC-only' or 'Hybrid'.
   // Currently ANKER-specific: X1-H*** = Hybrid, X1-P*** = AC-only.
@@ -511,9 +519,6 @@ export default function QuoteBuilder() {
   // Find which inverter types (AC-only / Hybrid) exist for the current selection
   const availableInverterTypes = useMemo(() => {
     let matching = inverterCandidates
-    if (availablePhases.length > 1) {
-      matching = matching.filter(p => p.inverter_phase === inverterPhase)
-    }
     if (availableParalleled.length > 1) {
       matching = matching.filter(p => p.inverter_paralleled === inverterParalleled)
     }
@@ -523,9 +528,8 @@ export default function QuoteBuilder() {
       if (t) types.add(t)
     })
     return Array.from(types).sort((a, b) => (a === 'AC-only' ? -1 : 1))
-  }, [inverterCandidates, availablePhases, inverterPhase, availableParalleled, inverterParalleled])
+  }, [inverterCandidates, availableParalleled, inverterParalleled])
 
-  const showPhaseFilter = availablePhases.length > 1
   const showParalleledFilter = availableParalleled.length > 1
   const showInverterTypeFilter = availableInverterTypes.length > 1
 
@@ -535,6 +539,12 @@ export default function QuoteBuilder() {
       setBrand(availableBrands[0])
     }
   }, [availableBrands, brand, includesBattery])
+
+  useEffect(() => {
+    if (showPhaseFilter && !availableBrandPhases.includes(inverterPhase)) {
+      setInverterPhase(availableBrandPhases[0])
+    }
+  }, [availableBrandPhases, inverterPhase, showPhaseFilter])
 
   useEffect(() => {
     if (includesBattery && availableBatterySizes.length > 0 && !availableBatterySizes.includes(batteryKwh)) {
@@ -577,12 +587,6 @@ export default function QuoteBuilder() {
       setHvacKw(availableHvacKws[0])
     }
   }, [availableHvacKws, hvacKw, includesHvac])
-
-  useEffect(() => {
-    if (showPhaseFilter && !availablePhases.includes(inverterPhase)) {
-      setInverterPhase(availablePhases[0])
-    }
-  }, [availablePhases, inverterPhase, showPhaseFilter])
 
   useEffect(() => {
     if (showParalleledFilter && !availableParalleled.includes(inverterParalleled)) {
@@ -986,6 +990,17 @@ export default function QuoteBuilder() {
                     {availableBrands.map(b => <option key={b}>{b}</option>)}
                   </select>
 
+                  {showPhaseFilter && (
+                    <>
+                      <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Phase</label>
+                      <SegmentedControl
+                        value={inverterPhase}
+                        options={availableBrandPhases}
+                        onChange={v => setInverterPhase(v)}
+                      />
+                    </>
+                  )}
+
                   <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Battery size</label>
                   <select value={batteryKwh} onChange={e => setBatteryKwh(Number(e.target.value))}
                     className="h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm">
@@ -1016,17 +1031,6 @@ export default function QuoteBuilder() {
                       <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{systemSize} kW</span>
                     </div>
                   </div>
-                </>
-              )}
-
-              {showPhaseFilter && (
-                <>
-                  <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Phase</label>
-                  <SegmentedControl
-                    value={inverterPhase}
-                    options={availablePhases}
-                    onChange={v => setInverterPhase(v)}
-                  />
                 </>
               )}
 
