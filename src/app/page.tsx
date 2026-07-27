@@ -1295,7 +1295,7 @@ export default function QuoteBuilder() {
         </div>
 
         <div>
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-500 mb-2">Quote summary</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-500 mb-2">Summary</p>
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
             <div className="flex items-baseline justify-between mb-1">
               <span className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-500">Total (inc GST)</span>
@@ -1384,7 +1384,7 @@ export default function QuoteBuilder() {
                   onClick={() => setShowSaveDialog(true)}
                   className="hidden md:flex w-full py-2 text-sm border rounded-md transition-colors items-center justify-center gap-1.5 bg-gray-900 dark:bg-gray-700 text-white border-gray-900 dark:border-gray-700 hover:bg-gray-800 dark:hover:bg-gray-600"
                 >
-                  <Save className="w-3.5 h-3.5" /> Save quote
+                  <Save className="w-3.5 h-3.5" /> Save only
                 </button>
               ) : (
                 <button
@@ -1422,7 +1422,7 @@ export default function QuoteBuilder() {
           <div className="flex items-center gap-2">
             <History className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-500">
-              {profile?.role === 'admin' ? 'Recent quotes — all users (last 20)' : 'Your recent quotes (last 20)'}
+              {profile?.role === 'admin' ? 'Recent saves — all users (last 20)' : 'Your recent saves (last 20)'}
             </p>
           </div>
           <button onClick={loadRecentQuotes} className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:text-gray-200">
@@ -1433,14 +1433,14 @@ export default function QuoteBuilder() {
           {loadingQuotes ? (
             <p className="text-xs text-gray-400 dark:text-gray-500 italic p-4 text-center">Loading…</p>
           ) : recentQuotes.length === 0 ? (
-            <p className="text-xs text-gray-400 dark:text-gray-500 italic p-4 text-center">No saved quotes yet</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 italic p-4 text-center">Nothing saved yet</p>
           ) : (
             <>
               {/* Desktop: table */}
               <table className="hidden md:table w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
                   <tr className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">
-                    <th className="text-left font-medium px-3 py-2">Quote #</th>
+                    <th className="text-left font-medium px-3 py-2">Ref #</th>
                     <th className="text-left font-medium px-3 py-2">Nickname</th>
                     <th className="text-left font-medium px-3 py-2">Customer</th>
                     <th className="text-left font-medium px-3 py-2">Configuration</th>
@@ -1521,7 +1521,7 @@ export default function QuoteBuilder() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => !saving && setShowSaveDialog(false)}>
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
-              <p className="font-medium">Save quote</p>
+              <p className="font-medium">Save only</p>
               <button onClick={() => !saving && setShowSaveDialog(false)} className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 md:p-1 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 rounded" aria-label="Close">
                 <X className="w-4 h-4" />
               </button>
