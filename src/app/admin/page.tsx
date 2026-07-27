@@ -12,6 +12,7 @@ type Profile = {
   role: 'specialist' | 'admin'
   full_name: string | null
   teams: string[]
+  active: boolean
 }
 
 type MergeResult = {
@@ -136,11 +137,16 @@ export default function AdminPage() {
     }
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, role, full_name, teams')
+      .select('id, email, role, full_name, teams, active')
       .eq('id', user.id)
       .single()
     if (error) {
       console.error('Failed to load profile:', error)
+      return
+    }
+    if (data && !data.active) {
+      await supabase.auth.signOut()
+      window.location.href = '/login?revoked=1'
       return
     }
     if (data) setProfile(data as Profile)
@@ -273,6 +279,13 @@ export default function AdminPage() {
               title="Open builder admin page"
             >
               Builder admin →
+            </a>
+            <a
+              href="/team"
+              className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-2 py-1 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
+              title="Manage team access"
+            >
+              Team →
             </a>
             <button
               onClick={signOut}

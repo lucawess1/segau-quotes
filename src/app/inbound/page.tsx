@@ -16,6 +16,7 @@ type Profile = {
   role: 'specialist' | 'admin'
   full_name: string | null
   teams: string[]
+  active: boolean
 }
 
 type Discount = {
@@ -373,11 +374,16 @@ export default function QuoteBuilder() {
     if (!user) return
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, role, full_name, teams')
+      .select('id, email, role, full_name, teams, active')
       .eq('id', user.id)
       .single()
     if (error) {
       console.error('Failed to load profile:', error)
+      return
+    }
+    if (data && !data.active) {
+      await supabase.auth.signOut()
+      window.location.href = '/login?revoked=1'
       return
     }
     if (data) setProfile(data as Profile)
@@ -944,7 +950,7 @@ export default function QuoteBuilder() {
             >
               <option value="/">Standard</option>
               <option value="/inbound">Inbound</option>
-              {profile.role === 'admin' && (
+              {(profile.teams?.includes('asc') || profile.role === 'admin') && (
                 <option value="/asc">ASC</option>
               )}
             </select>

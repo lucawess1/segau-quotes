@@ -7,6 +7,9 @@ import { Zap } from 'lucide-react'
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Read directly from window.location rather than next/navigation's useSearchParams, which would
+  // require wrapping this page in a Suspense boundary just to show one message.
+  const [revoked] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('revoked') === '1')
 
   const signInWithGoogle = async () => {
     setLoading(true)
@@ -34,6 +37,12 @@ export default function LoginPage() {
             <p className="text-xs text-gray-500 dark:text-gray-400">Sign in to continue</p>
           </div>
         </div>
+
+        {revoked && (
+          <p className="mb-4 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2">
+            Your access has been revoked. Contact your team admin if you believe this is a mistake.
+          </p>
+        )}
 
         <button
           onClick={signInWithGoogle}

@@ -16,6 +16,7 @@ type Profile = {
   role: 'specialist' | 'admin'
   full_name: string | null
   teams: string[]
+  active: boolean
 }
 
 // Minimal Quote shape used by the recent quotes list (matches the columns we select)
@@ -360,11 +361,16 @@ export default function QuoteBuilder() {
     if (!user) return
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, role, full_name, teams')
+      .select('id, email, role, full_name, teams, active')
       .eq('id', user.id)
       .single()
     if (error) {
       console.error('Failed to load profile:', error)
+      return
+    }
+    if (data && !data.active) {
+      await supabase.auth.signOut()
+      window.location.href = '/login?revoked=1'
       return
     }
     if (data) setProfile(data as Profile)
@@ -900,10 +906,19 @@ export default function QuoteBuilder() {
               {(profile.teams?.includes('inbound') || profile.role === 'admin') && (
                 <option value="/inbound">Inbound</option>
               )}
-              {profile.role === 'admin' && (
+              {(profile.teams?.includes('asc') || profile.role === 'admin') && (
                 <option value="/asc">ASC</option>
               )}
             </select>
+          )}
+          {profile && (profile.role === 'admin' || profile.teams?.includes('team_admin')) && (
+            <a
+              href="/team"
+              className="hidden md:inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-2 py-1 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
+              title="Manage team access"
+            >
+              Team →
+            </a>
           )}
           <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 max-w-[120px] md:max-w-none">
             <User className="w-3.5 h-3.5 flex-shrink-0" />
