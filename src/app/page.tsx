@@ -690,10 +690,14 @@ export default function QuoteBuilder() {
   const filteredExtras = useMemo(() => {
     const q = extraSearchQuery.trim().toLowerCase()
     const matching = !q ? extras : extras.filter(e => e.name.toLowerCase().includes(q) || e.category.toLowerCase().includes(q))
-    // Extended Warranty is always the last option in the list, regardless of search/catalog order
-    return [...matching].sort((a, b) =>
-      Number(a.name.toLowerCase() === 'extended warranty') - Number(b.name.toLowerCase() === 'extended warranty')
-    )
+    // Alphabetical by default, but Extended Warranty is always pinned last regardless of where
+    // that puts it alphabetically
+    return [...matching].sort((a, b) => {
+      const aWarranty = a.name.toLowerCase().includes('extended warranty')
+      const bWarranty = b.name.toLowerCase().includes('extended warranty')
+      if (aWarranty !== bWarranty) return aWarranty ? 1 : -1
+      return a.name.localeCompare(b.name)
+    })
   }, [extras, extraSearchQuery])
 
   // Base package price (0 if no base package, e.g. HWHP Only)
