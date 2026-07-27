@@ -139,6 +139,9 @@ export default function QuoteBuilder() {
   const [brand, setBrand] = useState<string>('ALPHA')
   const [batteryKwh, setBatteryKwh] = useState<number>(10)
   const [panels, setPanels] = useState<number>(15)
+  // Separate raw text buffer for the panel count field — lets the user clear/retype digits
+  // (Number('') is 0, not NaN, so clamping on every keystroke made the field impossible to clear)
+  const [panelsInput, setPanelsInput] = useState(String(panels))
   const [hwhpLitres, setHwhpLitres] = useState<number>(280)
   const [hwhpModel, setHwhpModel] = useState<string>('EHPG VM')
   const [hvacType, setHvacType] = useState<string>('Ducted')
@@ -565,6 +568,11 @@ export default function QuoteBuilder() {
       setPanels(panelRange.min)
     }
   }, [panelRange, panels, includesSolar])
+
+  // Keep the text-buffer field in sync whenever panels changes from elsewhere (slider, auto-correct)
+  useEffect(() => {
+    setPanelsInput(String(panels))
+  }, [panels])
 
   useEffect(() => {
     if (includesHwhp && availableHwhpLitres.length > 0 && !availableHwhpLitres.includes(hwhpLitres)) {
@@ -1028,12 +1036,16 @@ export default function QuoteBuilder() {
                         type="number"
                         min={panelRange.min}
                         max={panelRange.max}
-                        value={panels}
+                        value={panelsInput}
                         onChange={e => {
-                          const n = Number(e.target.value)
+                          const text = e.target.value
+                          setPanelsInput(text)
+                          if (text.trim() === '') return
+                          const n = Number(text)
                           if (Number.isNaN(n)) return
                           setPanels(Math.max(panelRange.min, Math.min(panelRange.max, n)))
                         }}
+                        onBlur={() => setPanelsInput(String(panels))}
                         className="w-14 px-2 py-1 text-sm font-medium text-right border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 focus:outline-none focus:border-gray-400 dark:focus:border-gray-500"
                       />
                       <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{systemSize} kW</span>
@@ -1244,9 +1256,12 @@ export default function QuoteBuilder() {
                     ) : (
                       filteredExtras.map(e => (
                         <button key={e.id} onClick={() => addExtra(e)}
-                          className="w-full text-left px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex justify-between items-center">
-                          <span>{e.name}</span>
-                          <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">
+                          className="w-full text-left px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex justify-between items-center gap-2">
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            <span className="truncate">{e.name}</span>
+                            {e.charge_type === 'QUOTED' && <Badge type="QUOTED" />}
+                          </span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500 flex-shrink-0">
                             {e.charge_type === 'Per Panel' ? `$${e.unit_price}/panel` : formatCurrency(e.unit_price)}
                           </span>
                         </button>
