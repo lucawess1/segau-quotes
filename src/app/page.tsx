@@ -1704,21 +1704,24 @@ function QuotedAmountInput({ value, onCommit }: { value: number; onCommit: (n: n
   const [text, setText] = useState(String(value))
   useEffect(() => { setText(String(value)) }, [value])
   return (
-    <input
-      type="number"
-      min={0}
-      value={text}
-      onChange={e => {
-        const t = e.target.value
-        setText(t)
-        if (t.trim() === '') return
-        const n = Number(t)
-        if (Number.isNaN(n)) return
-        onCommit(Math.max(0, n))
-      }}
-      onBlur={() => setText(String(value))}
-      className="w-20 px-1.5 py-1 text-xs font-medium text-right border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 focus:outline-none focus:border-gray-400 dark:focus:border-gray-500"
-    />
+    <div className="relative">
+      <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-gray-500 pointer-events-none">$</span>
+      <input
+        type="number"
+        min={0}
+        value={text}
+        onChange={e => {
+          const t = e.target.value
+          setText(t)
+          if (t.trim() === '') return
+          const n = Number(t)
+          if (Number.isNaN(n)) return
+          onCommit(Math.max(0, n))
+        }}
+        onBlur={() => setText(String(value))}
+        className="w-16 pl-4 pr-1 py-1 text-xs font-medium text-right border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 focus:outline-none focus:border-gray-400 dark:focus:border-gray-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+      />
+    </div>
   )
 }
 
