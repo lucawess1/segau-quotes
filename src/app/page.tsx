@@ -8,7 +8,7 @@ import { Zap, User, Plus, X, Save, Info, Check, History, LogOut } from 'lucide-r
 // Single Supabase client instance for this module
 const supabase = createClient()
 
-type QuoteExtra = Extra & { instanceId: string }
+type QuoteExtra = Extra & { instanceId: string; overridePrice?: number }
 
 type Profile = {
   id: string
@@ -683,7 +683,8 @@ export default function QuoteBuilder() {
   )
 
   const extrasTotal = selectedExtras.reduce((sum, e) => {
-    return sum + (e.charge_type === 'Per Panel' ? e.unit_price * panels : e.unit_price)
+    const price = e.overridePrice ?? e.unit_price
+    return sum + (e.charge_type === 'Per Panel' ? price * panels : price)
   }, 0)
 
   const filteredExtras = useMemo(() => {
@@ -739,6 +740,10 @@ export default function QuoteBuilder() {
     setSelectedExtras([...selectedExtras, { ...e, instanceId: crypto.randomUUID() }])
     setShowExtraPicker(false)
     setExtraSearchQuery('')
+  }
+
+  const updateExtraPrice = (instanceId: string, price: number) => {
+    setSelectedExtras(selectedExtras.map(e => e.instanceId === instanceId ? { ...e, overridePrice: price } : e))
   }
 
   const removeExtra = (instanceId: string) => {
@@ -850,12 +855,15 @@ export default function QuoteBuilder() {
 
     // Save the extras as quote_extras rows (only if we have any and the quote insert succeeded)
     if (selectedExtras.length > 0 && quoteRow) {
-      const extrasRows = selectedExtras.map(e => ({
-        quote_id: quoteRow.id,
-        extra_id: e.id,
-        quantity: e.charge_type === 'Per Panel' ? panels : 1,
-        line_total: e.charge_type === 'Per Panel' ? e.unit_price * panels : e.unit_price,
-      }))
+      const extrasRows = selectedExtras.map(e => {
+        const price = e.overridePrice ?? e.unit_price
+        return {
+          quote_id: quoteRow.id,
+          extra_id: e.id,
+          quantity: e.charge_type === 'Per Panel' ? panels : 1,
+          line_total: e.charge_type === 'Per Panel' ? price * panels : price,
+        }
+      })
       const { error: extrasError } = await supabase.from('quote_extras').insert(extrasRows)
       if (extrasError) console.error('Failed to save quote extras:', extrasError)
     }
@@ -1247,7 +1255,8 @@ export default function QuoteBuilder() {
                   <p className="text-xs text-gray-400 dark:text-gray-500 italic py-2">No extras added yet</p>
                 )}
                 {selectedExtras.map(e => {
-                  const lineTotal = e.charge_type === 'Per Panel' ? e.unit_price * panels : e.unit_price
+                  const price = e.overridePrice ?? e.unit_price
+                  const lineTotal = e.charge_type === 'Per Panel' ? price * panels : price
                   return (
                     <div key={e.instanceId} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 rounded-md px-2.5 py-2">
                       <div className="flex items-center gap-2 min-w-0">
@@ -1256,10 +1265,13 @@ export default function QuoteBuilder() {
                       </div>
                       <div className="flex items-center gap-2.5 flex-shrink-0">
                         <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">
-                          {e.charge_type === 'Per Panel' ? `$${e.unit_price} × ${panels}` :
-                           e.charge_type === 'QUOTED' ? 'est.' : ''}
+                          {e.charge_type === 'Per Panel' ? `$${price} × ${panels}` : ''}
                         </span>
-                        <span className="font-medium min-w-[60px] text-right">{formatCurrency(lineTotal)}</span>
+                        {e.charge_type === 'QUOTED' ? (
+                          <QuotedAmountInput value={price} onCommit={n => updateExtraPrice(e.instanceId, n)} />
+                        ) : (
+                          <span className="font-medium min-w-[60px] text-right">{formatCurrency(lineTotal)}</span>
+                        )}
                         <button onClick={() => removeExtra(e.instanceId)}
                           className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 md:p-1 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 rounded" aria-label="Remove">
                           <X className="w-3 h-3" />
@@ -1685,6 +1697,28 @@ function SegmentedControl({ value, options, labels, labelPrefix, onChange }: {
         </button>
       ))}
     </div>
+  )
+}
+
+function QuotedAmountInput({ value, onCommit }: { value: number; onCommit: (n: number) => void }) {
+  const [text, setText] = useState(String(value))
+  useEffect(() => { setText(String(value)) }, [value])
+  return (
+    <input
+      type="number"
+      min={0}
+      value={text}
+      onChange={e => {
+        const t = e.target.value
+        setText(t)
+        if (t.trim() === '') return
+        const n = Number(t)
+        if (Number.isNaN(n)) return
+        onCommit(Math.max(0, n))
+      }}
+      onBlur={() => setText(String(value))}
+      className="w-20 px-1.5 py-1 text-xs font-medium text-right border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 focus:outline-none focus:border-gray-400 dark:focus:border-gray-500"
+    />
   )
 }
 
