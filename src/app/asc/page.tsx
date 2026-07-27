@@ -684,8 +684,11 @@ export default function QuoteBuilder() {
 
   const filteredExtras = useMemo(() => {
     const q = extraSearchQuery.trim().toLowerCase()
-    if (!q) return extras
-    return extras.filter(e => e.name.toLowerCase().includes(q) || e.category.toLowerCase().includes(q))
+    const matching = !q ? extras : extras.filter(e => e.name.toLowerCase().includes(q) || e.category.toLowerCase().includes(q))
+    // Extended Warranty is always the last option in the list, regardless of search/catalog order
+    return [...matching].sort((a, b) =>
+      Number(a.name.toLowerCase() === 'extended warranty') - Number(b.name.toLowerCase() === 'extended warranty')
+    )
   }, [extras, extraSearchQuery])
 
   // Compose the CASH price from base package + HWHP + HVAC add-ons.
@@ -1243,7 +1246,9 @@ export default function QuoteBuilder() {
                         <button key={e.id} onClick={() => addExtra(e)}
                           className="w-full text-left px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex justify-between items-center gap-2">
                           <span className="flex items-center gap-1.5 min-w-0">
-                            <span className="truncate">{e.name}</span>
+                            <span className="truncate">
+                              <span className="text-gray-400 dark:text-gray-500">{e.category}</span> - {e.name}
+                            </span>
                             {e.charge_type === 'QUOTED' && <Badge type="QUOTED" />}
                           </span>
                           <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500 flex-shrink-0">
