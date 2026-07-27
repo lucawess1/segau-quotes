@@ -178,7 +178,7 @@ export default function TeamPage() {
           <div className="flex items-center gap-2.5">
             <Zap className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             <div>
-              <p className="font-medium text-[15px]">SEG Pricing Builder — Team</p>
+              <p className="font-medium text-[15px]">SE Pricing Builder — Team</p>
               <p className="text-xs text-gray-500 dark:text-gray-400">Onboard and manage specialist access</p>
             </div>
           </div>

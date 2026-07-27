@@ -917,7 +917,7 @@ export default function QuoteBuilder() {
         <div className="flex items-center gap-2 md:gap-2.5 min-w-0">
           <Zap className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
           <div className="min-w-0">
-            <p className="font-medium text-sm md:text-[15px] truncate">SEG Pricing Builder</p>
+            <p className="font-medium text-sm md:text-[15px] truncate">SE Pricing Builder</p>
             <p className="hidden md:block text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">Pricing v2026.05.05 · last updated 5 May</p>
           </div>
         </div>
@@ -1369,14 +1369,14 @@ export default function QuoteBuilder() {
               </div>
             )}
 
-            <div className={`mt-3 px-3 py-2.5 rounded-md flex gap-2 items-start ${quotedItems > 0 ? 'bg-amber-50 dark:bg-amber-950/50' : 'bg-blue-50 dark:bg-blue-950/50'}`}>
-              <Info className={`w-4 h-4 flex-shrink-0 mt-0.5 ${quotedItems > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-300'}`} />
-              <p className={`text-xs leading-relaxed ${quotedItems > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-300'}`}>
-                {quotedItems > 0
-                  ? `Includes ${quotedItems} QUOTED item${quotedItems > 1 ? 's' : ''} — confirm with Tech before sending.`
-                  : 'All prices fixed — ready to send to customer.'}
-              </p>
-            </div>
+            {quotedItems > 0 && (
+              <div className="mt-3 px-3 py-2.5 rounded-md flex gap-2 items-start bg-amber-50 dark:bg-amber-950/50">
+                <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-700 dark:text-amber-400" />
+                <p className="text-xs leading-relaxed text-amber-700 dark:text-amber-400">
+                  {`Includes ${quotedItems} QUOTED item${quotedItems > 1 ? 's' : ''} — confirm with Tech before sending.`}
+                </p>
+              </div>
+            )}
 
             <div className="mt-3.5 space-y-1.5">
               {canQuote ? (
