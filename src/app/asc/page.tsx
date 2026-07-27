@@ -419,6 +419,11 @@ export default function QuoteBuilder() {
     return Array.from(set).sort()
   }, [setPackages_])
 
+  // A package's inverter_phase is pipe-delimited (e.g. "1PH|3PH") when the same row is offered in
+  // both phases, rather than needing a duplicate row per phase.
+  const packagePhases = (phase: string | null | undefined): string[] =>
+    phase ? phase.split('|').map(s => s.trim()).filter(Boolean) : []
+
   // Phase is a brand-level choice, not a battery-size-level one: some brands (e.g. Alpha) have
   // entirely separate battery sizes per phase (5/10/13.9/15/20/25/30kWh = 1PH only,
   // 9.3/18.6/27.9/37.2/46.5/55.8kWh = 3PH only — no overlap), while others (e.g. ANKER) offer the
@@ -427,7 +432,7 @@ export default function QuoteBuilder() {
   // resolved one step earlier than before.
   const availableBrandPhases = useMemo(() => {
     if (!includesBattery) return []
-    const set = new Set(setPackages_.filter(p => p.brand === brand).map(p => p.inverter_phase).filter(Boolean) as string[])
+    const set = new Set(setPackages_.filter(p => p.brand === brand).flatMap(p => packagePhases(p.inverter_phase)))
     return Array.from(set).sort()
   }, [setPackages_, brand, includesBattery])
 
@@ -437,7 +442,7 @@ export default function QuoteBuilder() {
     if (!includesBattery) return []
     const sizes = new Set(
       setPackages_
-        .filter(p => p.brand === brand && (!showPhaseFilter || p.inverter_phase === inverterPhase))
+        .filter(p => p.brand === brand && (!showPhaseFilter || packagePhases(p.inverter_phase).includes(inverterPhase)))
         .map(p => p.battery_kwh)
         .filter((s): s is number => s !== null && s !== undefined && s > 0)
     )
@@ -486,7 +491,7 @@ export default function QuoteBuilder() {
       if (p.brand !== brand) return false
       if ((p.battery_kwh ?? 0) !== batteryKwh) return false
       if (includesSolar && (p.panel_count ?? 0) !== panels) return false
-      if (showPhaseFilter && p.inverter_phase !== inverterPhase) return false
+      if (showPhaseFilter && !packagePhases(p.inverter_phase).includes(inverterPhase)) return false
       return true
     })
   }, [setPackages_, brand, batteryKwh, panels, includesBattery, includesSolar, showPhaseFilter, inverterPhase])
@@ -604,7 +609,7 @@ export default function QuoteBuilder() {
     if (includesSolar) {
       if ((p.panel_count ?? 0) !== panels) return false
     }
-    if (showPhaseFilter && p.inverter_phase !== inverterPhase) return false
+    if (showPhaseFilter && !packagePhases(p.inverter_phase).includes(inverterPhase)) return false
     if (showParalleledFilter && p.inverter_paralleled !== inverterParalleled) return false
     if (showInverterTypeFilter && classifyInverterType(p.battery_inverter) !== inverterType) return false
     return true
@@ -1320,7 +1325,7 @@ export default function QuoteBuilder() {
                           return matchedPackage.inverter_paralleled ? `${inv} ×2` : inv
                         })()}
                       />
-                      {showPhaseFilter && <SpecRow label="Phase" value={matchedPackage.inverter_phase} />}
+                      {showPhaseFilter && <SpecRow label="Phase" value={inverterPhase} />}
                       {showParalleledFilter && <SpecRow label="Config" value={matchedPackage.inverter_paralleled ? 'Paralleled ×2' : 'Single'} />}
                     </SpecGroup>
                   )}
