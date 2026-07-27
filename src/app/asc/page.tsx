@@ -1304,7 +1304,7 @@ export default function QuoteBuilder() {
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-500 mb-2">Summary</p>
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
             <div className="flex items-baseline justify-between mb-1">
-              <span className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-500">Total (inc GST)</span>
+              <span className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-500">Total Amount (After STC/Rebates)</span>
               <span className="text-2xl font-medium">{formatCurrency(total)}</span>
             </div>
             <div className="flex items-baseline justify-between pb-3 border-b border-gray-200 dark:border-gray-700">
@@ -1318,8 +1318,9 @@ export default function QuoteBuilder() {
 
             <div className="mt-3 text-sm space-y-1">
               <Line label="Base package" value={formatCurrency(base)} />
-              <Line label={`STC discount (ZN${zone})`} value={`−${formatCurrency(stc)}`} valueColor="text-green-600 dark:text-green-400" />
               <Line label={`Extras (${selectedExtras.length})`} value={formatCurrency(extrasTotal)} />
+              <Line label="Total System Amount (Before Rebates)" value={formatCurrency(base + extrasTotal)} />
+              <Line label={`STC discount (ZN${zone})`} value={`−${formatCurrency(stc)}`} valueColor="text-green-600 dark:text-green-400" />
             </div>
 
             {matchedPackage && inboundDiscount === 0 && (
@@ -1652,7 +1653,7 @@ export default function QuoteBuilder() {
           {canQuote ? (
             <>
               <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-tight">
-                {financeTerm === 'Cash' ? 'Total (inc GST)' : `BNPL ${financeTerm} · $${Math.round(fortnightly)}/fn`}
+                {financeTerm === 'Cash' ? 'Total Amount (After STC/Rebates)' : `BNPL ${financeTerm} · $${Math.round(fortnightly)}/fn`}
               </p>
               <p className="text-lg font-medium leading-tight">{formatCurrency(total)}</p>
             </>
