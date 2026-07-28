@@ -470,6 +470,21 @@ export default function QuoteBuilder() {
     return Array.from(sizes).sort((a, b) => a - b)
   }, [setPackages_, brand, includesBattery, showPhaseFilter, inverterPhase])
 
+  // Battery model per size, shown alongside kWh in the dropdown — several brands reuse the same
+  // capacity across different models, which was confusing people into picking the wrong one.
+  const batterySizeModels = useMemo(() => {
+    const map = new Map<number, string>()
+    if (!includesBattery) return map
+    setPackages_
+      .filter(p => p.brand === brand && (!showPhaseFilter || packagePhases(p.inverter_phase).includes(inverterPhase)))
+      .forEach(p => {
+        if (p.battery_kwh != null && p.battery_kwh > 0 && p.battery_model && !map.has(p.battery_kwh)) {
+          map.set(p.battery_kwh, p.battery_model)
+        }
+      })
+    return map
+  }, [setPackages_, brand, includesBattery, showPhaseFilter, inverterPhase])
+
   const panelRange = useMemo(() => {
     if (!includesSolar) return { min: 0, max: 0 }
     const matching = setPackages_.filter(p => {
@@ -1040,7 +1055,9 @@ export default function QuoteBuilder() {
                   <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Battery size</label>
                   <select value={batteryKwh} onChange={e => setBatteryKwh(Number(e.target.value))}
                     className="h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm">
-                    {availableBatterySizes.map(s => <option key={s} value={s}>{s} kWh</option>)}
+                    {availableBatterySizes.map(s => (
+                      <option key={s} value={s}>{s} kWh{batterySizeModels.get(s) ? ` (${batterySizeModels.get(s)})` : ''}</option>
+                    ))}
                   </select>
                 </>
               )}
