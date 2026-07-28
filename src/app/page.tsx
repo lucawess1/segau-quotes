@@ -1756,9 +1756,9 @@ function BatterySizeSelect({ value, options, models, onChange }: {
         aria-expanded={open}
         className="w-full h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm flex items-center justify-between gap-2"
       >
-        <span className="truncate">
-          {value} kWh
-          {models.get(value) && <span className="text-gray-400 dark:text-gray-500"> ({models.get(value)})</span>}
+        <span className="flex-1 flex items-center justify-between gap-2 min-w-0">
+          <span>{value} kWh</span>
+          {models.get(value) && <span className="text-gray-400 dark:text-gray-500 truncate">{models.get(value)}</span>}
         </span>
         <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
       </button>
@@ -1771,12 +1771,12 @@ function BatterySizeSelect({ value, options, models, onChange }: {
               role="option"
               aria-selected={s === value}
               onClick={() => { onChange(s); setOpen(false) }}
-              className={`w-full text-left px-3 py-2.5 md:py-1.5 text-base md:text-sm min-h-[44px] md:min-h-0 flex items-center hover:bg-gray-100 dark:hover:bg-gray-800 ${
+              className={`w-full px-3 py-2.5 md:py-1.5 text-base md:text-sm min-h-[44px] md:min-h-0 flex items-center justify-between gap-2 hover:bg-gray-100 dark:hover:bg-gray-800 ${
                 s === value ? 'bg-gray-50 dark:bg-gray-800' : ''
               }`}
             >
-              {s} kWh
-              {models.get(s) && <span className="text-gray-400 dark:text-gray-500"> ({models.get(s)})</span>}
+              <span>{s} kWh</span>
+              {models.get(s) && <span className="text-gray-400 dark:text-gray-500 truncate">{models.get(s)}</span>}
             </button>
           ))}
         </div>
