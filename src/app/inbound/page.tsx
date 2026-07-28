@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Package, PriceVariant, Extra } from '@/lib/supabase'
-import { Zap, User, Plus, X, Save, Info, Check, History, LogOut } from 'lucide-react'
+import { Zap, User, Plus, X, Save, Info, Check, History, LogOut, ChevronDown } from 'lucide-react'
 
 // Single Supabase client instance for this module
 const supabase = createClient()
@@ -1053,12 +1053,12 @@ export default function QuoteBuilder() {
                   )}
 
                   <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Battery size</label>
-                  <select value={batteryKwh} onChange={e => setBatteryKwh(Number(e.target.value))}
-                    className="h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm">
-                    {availableBatterySizes.map(s => (
-                      <option key={s} value={s}>{s} kWh{batterySizeModels.get(s) ? ` (${batterySizeModels.get(s)})` : ''}</option>
-                    ))}
-                  </select>
+                  <BatterySizeSelect
+                    value={batteryKwh}
+                    options={availableBatterySizes}
+                    models={batterySizeModels}
+                    onChange={setBatteryKwh}
+                  />
                 </>
               )}
 
@@ -1763,6 +1763,64 @@ function SegmentedControl({ value, options, labels, labelPrefix, onChange }: {
           {labels ? labels[i] : labelPrefix ? `${labelPrefix}${opt}` : opt}
         </button>
       ))}
+    </div>
+  )
+}
+
+function BatterySizeSelect({ value, options, models, onChange }: {
+  value: number; options: number[]; models: Map<number, string>; onChange: (n: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', onOutside)
+    document.addEventListener('keydown', onEscape)
+    return () => {
+      document.removeEventListener('mousedown', onOutside)
+      document.removeEventListener('keydown', onEscape)
+    }
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="w-full h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm flex items-center justify-between gap-2"
+      >
+        <span className="truncate">
+          {value} kWh
+          {models.get(value) && <span className="text-gray-400 dark:text-gray-500"> ({models.get(value)})</span>}
+        </span>
+        <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+      </button>
+      {open && (
+        <div role="listbox" className="absolute z-20 mt-1 w-full max-h-60 overflow-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg">
+          {options.map(s => (
+            <button
+              key={s}
+              type="button"
+              role="option"
+              aria-selected={s === value}
+              onClick={() => { onChange(s); setOpen(false) }}
+              className={`w-full text-left px-3 py-2.5 md:py-1.5 text-base md:text-sm min-h-[44px] md:min-h-0 flex items-center hover:bg-gray-100 dark:hover:bg-gray-800 ${
+                s === value ? 'bg-gray-50 dark:bg-gray-800' : ''
+              }`}
+            >
+              {s} kWh
+              {models.get(s) && <span className="text-gray-400 dark:text-gray-500"> ({models.get(s)})</span>}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
