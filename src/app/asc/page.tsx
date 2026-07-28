@@ -688,8 +688,8 @@ export default function QuoteBuilder() {
     // Alphabetical by default, but Extended Warranty is always pinned last regardless of where
     // that puts it alphabetically
     return [...matching].sort((a, b) => {
-      const aWarranty = a.name.toLowerCase().includes('extended warranty')
-      const bWarranty = b.name.toLowerCase().includes('extended warranty')
+      const aWarranty = a.category.toLowerCase().includes('extended warranty')
+      const bWarranty = b.category.toLowerCase().includes('extended warranty')
       if (aWarranty !== bWarranty) return aWarranty ? 1 : -1
       return a.name.localeCompare(b.name)
     })
