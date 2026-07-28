@@ -291,6 +291,15 @@ export default function QuoteBuilder() {
   const selectedHwhp = hwhpProducts.find(h => h.id === selectedHwhpId) || null
   const selectedHvac = hvacProducts.find(h => h.id === selectedHvacId) || null
 
+  // HVAC model strings are formatted "{Type} HVAC {size/code}" (e.g. "Inverter split HVAC 3.5kW
+  // HSNRT35B") — split that out so the spec panel can show Type and Model as separate rows
+  // instead of one long string that gets truncated.
+  const parseHvacModel = (model: string): { type: string | null; rest: string } => {
+    const idx = model.indexOf(' HVAC ')
+    if (idx === -1) return { type: null, rest: model }
+    return { type: model.slice(0, idx), rest: model.slice(idx + ' HVAC '.length) }
+  }
+
   const loadExtrasWithCache = async () => {
     const CACHE_KEY = 'segpb_extras_cache'
     const CACHE_TTL_MS = 60 * 60 * 1000 // 1 hour
@@ -1379,7 +1388,15 @@ export default function QuoteBuilder() {
 
                   {includesHvac && selectedHvac && (
                     <SpecGroup title="HVAC">
-                      <SpecRow label="Model" value={selectedHvac.model} />
+                      {(() => {
+                        const { type, rest } = parseHvacModel(selectedHvac.model)
+                        return (
+                          <>
+                            {type && <SpecRow label="Type" value={type} />}
+                            <SpecRow label="Model" value={rest} />
+                          </>
+                        )
+                      })()}
                       {selectedHvac.brand && <SpecRow label="Brand" value={selectedHvac.brand} />}
                     </SpecGroup>
                   )}
