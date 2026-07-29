@@ -101,6 +101,15 @@ const HAS_BATTERY = ['Solar and Battery', 'Battery Only', 'Battery Only - Additi
 const HAS_SOLAR = ['Solar Only', 'Solar and Battery', 'Solar and HWHP', 'HWHP, Solar and Battery']
 const HAS_HWHP = ['HWHP Only', 'Battery and HWHP', 'Solar and HWHP', 'HWHP, Solar and Battery']
 
+// Which product_set to switch to when the "Add HWHP" promo is clicked, keyed by the current
+// (non-HWHP) product_set. No entry (e.g. 'Battery Only - Additional') means there's no valid
+// combined option, so the promo just doesn't offer a one-click add for it.
+const HWHP_ADD_MAP: Record<string, string> = {
+  'Solar and Battery': 'HWHP, Solar and Battery',
+  'Battery Only': 'Battery and HWHP',
+  'Solar Only': 'Solar and HWHP',
+}
+
 // Inbound channel sells a different panel model under the same prices.
 // This map substitutes display values when rendering — the DB stays as-is
 // so package matching, pricing, and audit history are unaffected.
@@ -241,6 +250,16 @@ export default function QuoteBuilder() {
   const [selectedHvacId, setSelectedHvacId] = useState<number | null>(null)
   const [inverterUpgrades, setInverterUpgrades] = useState<InverterUpgrade[]>([])
   const [selectedInverterUpgradeId, setSelectedInverterUpgradeId] = useState<number | null>(null)
+
+  // "Add HWHP/HVAC" upsell prompts — persisted locally so once someone turns them off, they stay off
+  const [showAddOnPromos, setShowAddOnPromos] = useState(true)
+  useEffect(() => {
+    const stored = localStorage.getItem('segpb_show_addon_promos')
+    if (stored !== null) setShowAddOnPromos(stored === 'true')
+  }, [])
+  useEffect(() => {
+    localStorage.setItem('segpb_show_addon_promos', String(showAddOnPromos))
+  }, [showAddOnPromos])
 
   const includesBattery = HAS_BATTERY.includes(productSet)
   const includesSolar = HAS_SOLAR.includes(productSet)
@@ -797,6 +816,48 @@ export default function QuoteBuilder() {
   const rawAfterStc = variant?.price_after_stc ?? 0
   const rawFortnightly = variant?.fortnightly_repay ?? 0
   const fortnightly = rawAfterStc > 0 ? rawFortnightly * (afterStc / rawAfterStc) : 0
+
+  // "Add HWHP/HVAC" upsell prompts — the $ figures are computed live from the cheapest available
+  // product for whichever add-on isn't already included, reusing the exact same pricing formula as
+  // the real total/fortnightly above (cash delta + its own inbound discount, same as everything
+  // else on this page), so they can never drift from what the quote would actually show.
+  const previewAddOnDelta = (cashDelta: number, discountDelta: number) => {
+    const hypDiscountedCashAfterStc = Math.max(0, (cashAfterStc + cashDelta) - (inboundDiscount + discountDelta))
+    const hypAfterStc = hypDiscountedCashAfterStc / financeMultiplier
+    const hypTotal = hypAfterStc + extrasTotal
+    const hypFortnightly = rawAfterStc > 0 ? rawFortnightly * (hypAfterStc / rawAfterStc) : 0
+    return { deltaTotal: hypTotal - total, deltaFortnightly: hypFortnightly - fortnightly }
+  }
+
+  const cheapestHwhp = useMemo(() => {
+    if (includesHwhp || !HWHP_ADD_MAP[productSet] || hwhpProducts.length === 0) return null
+    return [...hwhpProducts]
+      .map(h => ({ h, cost: (territory === 'Regional' ? h.cost_regional : h.cost_metro) ?? 0 }))
+      .filter(x => x.cost > 0)
+      .sort((a, b) => a.cost - b.cost)[0]?.h ?? null
+  }, [includesHwhp, productSet, hwhpProducts, territory])
+
+  const cheapestHvac = useMemo(() => {
+    if (includesHvac || hvacProducts.length === 0) return null
+    return [...hvacProducts]
+      .map(h => ({ h, cost: (territory === 'Regional' ? h.cost_regional : h.cost_metro) ?? 0 }))
+      .filter(x => x.cost > 0)
+      .sort((a, b) => a.cost - b.cost)[0]?.h ?? null
+  }, [includesHvac, hvacProducts, territory])
+
+  const hwhpPromo = cheapestHwhp ? (() => {
+    const cost = (territory === 'Regional' ? cheapestHwhp.cost_regional : cheapestHwhp.cost_metro) ?? 0
+    const comboDiscount = hasNonHwhpBase ? retailConfig.hwhp_combo_discount : 0
+    return {
+      targetProductSet: HWHP_ADD_MAP[productSet],
+      ...previewAddOnDelta(cost - cheapestHwhp.stc_value - comboDiscount, cheapestHwhp.inbound_discount),
+    }
+  })() : null
+
+  const hvacPromo = cheapestHvac ? (() => {
+    const cost = (territory === 'Regional' ? cheapestHvac.cost_regional : cheapestHvac.cost_metro) ?? 0
+    return previewAddOnDelta(cost, cheapestHvac.inbound_discount)
+  })() : null
 
   const quotedItems = selectedExtras.filter(e => e.charge_type === 'QUOTED').length
 
@@ -1355,7 +1416,18 @@ export default function QuoteBuilder() {
         </div>
 
         <div>
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-500 mb-2">Summary</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-500">Summary</p>
+            <label className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showAddOnPromos}
+                onChange={e => setShowAddOnPromos(e.target.checked)}
+                className="w-3.5 h-3.5 accent-blue-600 dark:accent-blue-400"
+              />
+              Suggest add-ons
+            </label>
+          </div>
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
             <div className="flex items-baseline justify-between mb-1">
               <span className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-500">Total Amount (After STC/Rebates)</span>
@@ -1441,6 +1513,41 @@ export default function QuoteBuilder() {
                     </SpecGroup>
                   )}
                 </div>
+              </div>
+            )}
+
+            {showAddOnPromos && (hwhpPromo || hvacPromo) && (
+              <div className="mt-3 space-y-1.5">
+                {hwhpPromo && (
+                  <button
+                    onClick={() => setProductSet(hwhpPromo.targetProductSet)}
+                    className="w-full text-left px-3 py-2 rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center justify-between gap-2"
+                  >
+                    <span className="text-xs text-blue-800 dark:text-blue-300 flex items-center gap-1">
+                      <Plus className="w-3 h-3 flex-shrink-0" /> Add Hot Water Heat Pump
+                    </span>
+                    <span className="text-xs font-medium text-blue-800 dark:text-blue-300 flex-shrink-0">
+                      {financeTerm === 'Cash'
+                        ? `+${formatCurrency(hwhpPromo.deltaTotal)}`
+                        : `+$${Math.round(hwhpPromo.deltaFortnightly)}/fn (+${formatCurrency(hwhpPromo.deltaTotal)} cash)`}
+                    </span>
+                  </button>
+                )}
+                {hvacPromo && (
+                  <button
+                    onClick={() => setIsHvacIncluded(true)}
+                    className="w-full text-left px-3 py-2 rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center justify-between gap-2"
+                  >
+                    <span className="text-xs text-blue-800 dark:text-blue-300 flex items-center gap-1">
+                      <Plus className="w-3 h-3 flex-shrink-0" /> Add HVAC
+                    </span>
+                    <span className="text-xs font-medium text-blue-800 dark:text-blue-300 flex-shrink-0">
+                      {financeTerm === 'Cash'
+                        ? `+${formatCurrency(hvacPromo.deltaTotal)}`
+                        : `+$${Math.round(hvacPromo.deltaFortnightly)}/fn (+${formatCurrency(hvacPromo.deltaTotal)} cash)`}
+                    </span>
+                  </button>
+                )}
               </div>
             )}
 
