@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Package, PriceVariant, Extra } from '@/lib/supabase'
-import { Zap, User, Plus, X, Save, Info, Check, History, LogOut, ChevronDown } from 'lucide-react'
+import { Zap, User, Plus, X, Save, Info, Check, History, LogOut, ChevronDown, Sparkles } from 'lucide-react'
 
 // Single Supabase client instance for this module
 const supabase = createClient()
@@ -968,6 +968,23 @@ export default function QuoteBuilder() {
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: 0 }).format(n)
 
+  // Alternative presentation of the same promo data as a top-of-page sliding banner, for comparing
+  // against the inline Summary-card cards above. Same underlying $ figures, same master on/off toggle.
+  const bannerItems: { key: string; label: string; sub: string; onClick: () => void }[] = [
+    hwhpPromo && {
+      key: 'hwhp',
+      label: 'Add a Hot Water Heat Pump',
+      sub: financeTerm === 'Cash' ? `+${formatCurrency(hwhpPromo.deltaTotal)}` : `from +$${Math.round(hwhpPromo.deltaFortnightly)}/fn`,
+      onClick: () => setProductSet(hwhpPromo.targetProductSet),
+    },
+    hvacPromo && {
+      key: 'hvac',
+      label: 'Add HVAC',
+      sub: financeTerm === 'Cash' ? `+${formatCurrency(hvacPromo.deltaTotal)}` : `from +$${Math.round(hvacPromo.deltaFortnightly)}/fn`,
+      onClick: () => setIsHvacIncluded(true),
+    },
+  ].filter((x): x is { key: string; label: string; sub: string; onClick: () => void } => Boolean(x))
+
   const systemSize = matchedPackage?.system_size_kw?.toFixed(2) ?? (panels * 0.44).toFixed(2)
 
   const inverterCode = (() => {
@@ -993,6 +1010,9 @@ export default function QuoteBuilder() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+    {showAddOnPromos && (
+      <SlidingPromoBanner items={bannerItems} onDismiss={() => setShowAddOnPromos(false)} />
+    )}
     <main className="max-w-5xl mx-auto p-3 md:p-6 pb-24 md:pb-6">
       <header className="flex items-center justify-between pb-3 mb-4 md:mb-5 border-b border-gray-200 dark:border-gray-700 gap-2">
         <div className="flex items-center gap-2 md:gap-2.5 min-w-0">
@@ -1901,6 +1921,51 @@ function BatterySizeSelect({ value, options, models, onChange }: {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function SlidingPromoBanner({ items, onDismiss }: {
+  items: { key: string; label: string; sub: string; onClick: () => void }[]
+  onDismiss: () => void
+}) {
+  const [shown, setShown] = useState(false)
+  const [index, setIndex] = useState(0)
+
+  useEffect(() => {
+    const t = setTimeout(() => setShown(true), 20)
+    return () => clearTimeout(t)
+  }, [])
+
+  useEffect(() => {
+    if (items.length < 2) return
+    const t = setInterval(() => setIndex(i => (i + 1) % items.length), 4000)
+    return () => clearInterval(t)
+  }, [items.length])
+
+  if (items.length === 0) return null
+  const current = items[index % items.length]
+
+  return (
+    <div className={`overflow-hidden transition-all duration-500 ease-out ${shown ? 'max-h-16 opacity-100' : 'max-h-0 opacity-0'}`}>
+      <div className="relative bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-700 dark:to-indigo-700 text-white">
+        <button
+          key={current.key}
+          onClick={current.onClick}
+          className="w-full px-10 py-2.5 flex items-center justify-center gap-2 text-sm font-medium hover:opacity-95 transition-opacity"
+        >
+          <Sparkles className="w-4 h-4 flex-shrink-0" />
+          <span>{current.label}</span>
+          <span className="font-semibold">{current.sub}</span>
+        </button>
+        <button
+          onClick={onDismiss}
+          aria-label="Dismiss"
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 hover:bg-white/10 rounded"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
     </div>
   )
 }
