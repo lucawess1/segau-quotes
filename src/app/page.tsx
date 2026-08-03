@@ -1010,9 +1010,6 @@ export default function QuoteBuilder() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-    {showAddOnPromos && (
-      <SlidingPromoBanner items={bannerItems} onDismiss={() => setShowAddOnPromos(false)} />
-    )}
     <main className="max-w-5xl mx-auto p-3 md:p-6 pb-24 md:pb-6">
       <header className="flex items-center justify-between pb-3 mb-4 md:mb-5 border-b border-gray-200 dark:border-gray-700 gap-2">
         <div className="flex items-center gap-2 md:gap-2.5 min-w-0">
@@ -1071,6 +1068,10 @@ export default function QuoteBuilder() {
           </button>
         </div>
       </header>
+
+      {showAddOnPromos && (
+        <SlidingPromoBanner items={bannerItems} onDismiss={() => setShowAddOnPromos(false)} />
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr] gap-4">
         <div>
@@ -1947,16 +1948,16 @@ function SlidingPromoBanner({ items, onDismiss }: {
   const current = items[index % items.length]
 
   return (
-    <div className={`overflow-hidden transition-all duration-500 ease-out ${shown ? 'max-h-16 opacity-100' : 'max-h-0 opacity-0'}`}>
-      <div className="relative bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-700 dark:to-indigo-700 text-white">
+    <div className={`overflow-hidden transition-all duration-500 ease-out mb-4 md:mb-5 ${shown ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'}`}>
+      <div className="relative rounded-xl shadow-lg shadow-orange-500/20 bg-gradient-to-r from-orange-500 to-amber-500 dark:from-orange-600 dark:to-amber-600 text-white">
         <button
           key={current.key}
           onClick={current.onClick}
-          className="w-full px-10 py-2.5 flex items-center justify-center gap-2 text-sm font-medium hover:opacity-95 transition-opacity"
+          className="w-full px-8 md:px-10 py-3 md:py-3.5 flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-sm md:text-base font-semibold hover:opacity-95 transition-opacity text-center"
         >
-          <Sparkles className="w-4 h-4 flex-shrink-0" />
+          <Sparkles className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
           <span>{current.label}</span>
-          <span className="font-semibold">{current.sub}</span>
+          <span className="font-bold">{current.sub}</span>
         </button>
         <button
           onClick={onDismiss}
