@@ -966,7 +966,7 @@ export default function QuoteBuilder() {
           {profile && (profile.role === 'admin' || profile.teams?.includes('team_admin')) && (
             <a
               href="/team"
-              className="hidden md:inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-2 py-1 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
+              className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-2 py-1 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
               title="Manage team access"
             >
               Team →
