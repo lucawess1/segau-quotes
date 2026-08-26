@@ -27,7 +27,7 @@ type Discount = {
 
 type HwhpProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; stc_value: number; inbound_discount: number; asc_discount: number; active: boolean }
 type HvacProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; inbound_discount: number; asc_discount: number; active: boolean }
-type WaterFilterProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; inbound_discount: number; asc_discount: number; active: boolean }
+type WaterFilterProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; inbound_discount: number; asc_discount: number; total_filters: number | null; cartridge_1: string | null; cartridge_2: string | null; cartridge_3: string | null; active: boolean }
 type RetailConfig = { hwhp_combo_discount: number; water_filter_combo_discount: number }
 type InverterUpgrade = {
   id: number; code: string; brand: string; inverter_model: string
@@ -1499,6 +1499,29 @@ export default function QuoteBuilder() {
                     <SpecGroup title="Water filter">
                       <SpecRow label="Model" value={selectedWaterFilter.model} />
                       {selectedWaterFilter.brand && <SpecRow label="Brand" value={selectedWaterFilter.brand} />}
+                      {selectedWaterFilter.total_filters != null && (
+                        <SpecRow label="Filters" value={selectedWaterFilter.total_filters} />
+                      )}
+                      {(() => {
+                        // Cartridges render stacked and full-width rather than as SpecRows — names like
+                        // "Anti Limescale Carbon Filter" overflow SpecRow's 180px right-aligned cap.
+                        const cartridges = [
+                          selectedWaterFilter.cartridge_1,
+                          selectedWaterFilter.cartridge_2,
+                          selectedWaterFilter.cartridge_3,
+                        ].filter((c): c is string => !!c)
+                        if (cartridges.length === 0) return null
+                        return (
+                          <div className="text-xs">
+                            <span className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Cartridges</span>
+                            <ul className="mt-0.5 space-y-0.5">
+                              {cartridges.map((c, i) => (
+                                <li key={i} className="text-gray-900 dark:text-gray-100 leading-snug pl-2">• {c}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )
+                      })()}
                     </SpecGroup>
                   )}
                 </div>
