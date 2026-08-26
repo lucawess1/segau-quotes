@@ -99,6 +99,13 @@ const HWHP_BASE_MAP: Record<string, string | null> = {
   'Water Filter Only': null,             // no base package, just the water filter add-on
 }
 
+// BNPL repayment = the financed amount spread over the term's fortnights, plus a flat per-fortnight
+// account fee. Applied directly rather than scaling a package's stored fortnightly_repay: that
+// scaling also multiplied the flat fee whenever add-ons pushed the price above the base package,
+// and it produced $0 for add-on-only quotes, which have no variant row to scale from.
+const BNPL_FORTNIGHTS: Record<string, number> = { '60m': 130, '84m': 182 }
+const BNPL_FORTNIGHTLY_FEE = 3.69
+
 const HAS_BATTERY = ['Solar and Battery', 'Battery Only', 'Battery Only - Additional', 'Battery and HWHP', 'HWHP, Solar and Battery']
 const HAS_SOLAR = ['Solar Only', 'Solar and Battery', 'Solar and HWHP', 'HWHP, Solar and Battery']
 const HAS_HWHP = ['HWHP Only', 'Battery and HWHP', 'Solar and HWHP', 'HWHP, Solar and Battery']
@@ -236,9 +243,6 @@ export default function QuoteBuilder() {
   const [hwhpProducts, setHwhpProducts] = useState<HwhpProduct[]>([])
   const [hvacProducts, setHvacProducts] = useState<HvacProduct[]>([])
   const [waterFilterProducts, setWaterFilterProducts] = useState<WaterFilterProduct[]>([])
-  // Per-dollar fortnightly rate per finance term, derived from real price_variants rows. Only used
-  // for add-on-only quotes (no base package), where there's no variant to scale a repayment from.
-  const [fortnightlyRates, setFortnightlyRates] = useState<Record<string, number>>({})
   const [retailConfig, setRetailConfig] = useState<RetailConfig>({ hwhp_combo_discount: 600, water_filter_combo_discount_hwhp: 800, water_filter_combo_discount_base: 600 })
   const [selectedHwhpId, setSelectedHwhpId] = useState<number | null>(null)
   const [isHvacIncluded, setIsHvacIncluded] = useState<boolean>(false)
@@ -289,17 +293,12 @@ export default function QuoteBuilder() {
   }, [])
 
   const loadAddOnProducts = async () => {
-    const [hwhpRes, hvacRes, waterFilterRes, cfgRes, inverterUpgradeRes, fnRateRes] = await Promise.all([
+    const [hwhpRes, hvacRes, waterFilterRes, cfgRes, inverterUpgradeRes] = await Promise.all([
       supabase.from('hwhp_products').select('*').eq('active', true).order('model'),
       supabase.from('hvac_products').select('*').eq('active', true).order('model'),
       supabase.from('water_filters').select('*').eq('active', true).order('model'),
       supabase.from('retail_config').select('*').eq('id', 1).single(),
       supabase.from('inverter_upgrades').select('*').eq('active', true).order('inverter_model'),
-      supabase.from('price_variants')
-        .select('finance_term, price_after_stc, fortnightly_repay')
-        .gt('price_after_stc', 0)
-        .not('fortnightly_repay', 'is', null)
-        .limit(500),
     ])
     if (hwhpRes.data) setHwhpProducts(hwhpRes.data as HwhpProduct[])
     if (waterFilterRes.data) setWaterFilterProducts(waterFilterRes.data as WaterFilterProduct[])
@@ -314,21 +313,6 @@ export default function QuoteBuilder() {
       setHvacProducts(sorted)
     }
     if (cfgRes.data) setRetailConfig(cfgRes.data as RetailConfig)
-    if (fnRateRes.data) {
-      // Average fortnightly-per-dollar by term. If BNPL is a flat term division this ratio is
-      // identical on every row, so the average is exact rather than an approximation.
-      const acc: Record<string, { n: number; sum: number }> = {}
-      for (const r of fnRateRes.data as { finance_term: string | null; price_after_stc: number | null; fortnightly_repay: number | null }[]) {
-        if (!r.finance_term || !r.price_after_stc || r.fortnightly_repay == null) continue
-        const a = acc[r.finance_term] ?? { n: 0, sum: 0 }
-        a.n += 1
-        a.sum += r.fortnightly_repay / r.price_after_stc
-        acc[r.finance_term] = a
-      }
-      const rates: Record<string, number> = {}
-      for (const [term, a] of Object.entries(acc)) rates[term] = a.sum / a.n
-      setFortnightlyRates(rates)
-    }
   }
 
   useEffect(() => {
@@ -850,13 +834,9 @@ export default function QuoteBuilder() {
   const total = afterStc + extrasTotal
 
   // Fortnightly: scale the standard fortnightly proportionally based on price movement
-  const rawAfterStc = variant?.price_after_stc ?? 0
-  const rawFortnightly = variant?.fortnightly_repay ?? 0
-  // With a base package, scale its own repayment. Without one (HWHP Only / Water Filter Only), fall
-  // back to the term's per-dollar rate so add-on-only quotes still show a repayment instead of $0.
-  const fortnightly = rawAfterStc > 0
-    ? rawFortnightly * (afterStc / rawAfterStc)
-    : (fortnightlyRates[financeTerm] ?? 0) * afterStc
+  const fortnightly = BNPL_FORTNIGHTS[financeTerm]
+    ? afterStc / BNPL_FORTNIGHTS[financeTerm] + BNPL_FORTNIGHTLY_FEE
+    : 0
 
   // "Add HWHP/HVAC" upsell prompts — the $ figures are computed live from the cheapest available
   // product for whichever add-on isn't already included, reusing the exact same pricing formula as
