@@ -92,6 +92,7 @@ const HWHP_BASE_MAP: Record<string, string | null> = {
   'Solar and HWHP': 'Solar Only',
   'Battery and HWHP': 'Battery Only',
   'HWHP, Solar and Battery': 'Solar and Battery',
+  'Water Filter Only': null,             // no base package, just the water filter add-on
 }
 
 const HAS_BATTERY = ['Solar and Battery', 'Battery Only', 'Battery Only - Additional', 'Battery and HWHP', 'HWHP, Solar and Battery']
@@ -117,6 +118,7 @@ const VISIBLE_PRODUCT_SETS = [
   'Battery and HWHP',
   'Solar and HWHP',
   'HWHP, Solar and Battery',
+  'Water Filter Only',
 ]
 
 export default function QuoteBuilder() {
@@ -252,7 +254,10 @@ export default function QuoteBuilder() {
   const includesSolar = HAS_SOLAR.includes(productSet)
   const includesHwhp = HAS_HWHP.includes(productSet)
   const includesHvac = isHvacIncluded  // now derived from toggle, not product_set
-  const includesWaterFilter = isWaterFilterIncluded  // toggle-driven add-on, same as HVAC
+  // Water filter is available two ways: as a toggle alongside any other product (like HVAC), or as
+  // a standalone 'Water Filter Only' product type, which forces it on.
+  const isWaterFilterOnly = productSet === 'Water Filter Only'
+  const includesWaterFilter = isWaterFilterIncluded || isWaterFilterOnly
 
   // Whether the current product includes any base product (Solar/Battery). Used for HWHP combo discount rule.
   // Rule: $600 combo discount fires when HWHP is combined with a non-HWHP-only base product.
@@ -320,14 +325,14 @@ export default function QuoteBuilder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHvacIncluded, hvacProducts])
 
-  // Default-select the water filter when its toggle turns on, clear when off
+  // Default-select the water filter when it becomes included (toggle or product type), clear when not
   useEffect(() => {
-    if (isWaterFilterIncluded && waterFilterProducts.length > 0 && !selectedWaterFilterId) {
+    if (includesWaterFilter && waterFilterProducts.length > 0 && !selectedWaterFilterId) {
       setSelectedWaterFilterId(waterFilterProducts[0].id)
     }
-    if (!isWaterFilterIncluded) setSelectedWaterFilterId(null)
+    if (!includesWaterFilter) setSelectedWaterFilterId(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isWaterFilterIncluded, waterFilterProducts])
+  }, [includesWaterFilter, waterFilterProducts])
 
   const selectedHwhp = hwhpProducts.find(h => h.id === selectedHwhpId) || null
   const selectedHvac = hvacProducts.find(h => h.id === selectedHvacId) || null
@@ -921,7 +926,7 @@ export default function QuoteBuilder() {
   const saveQuote = async () => {
     // Allow save if EITHER a base package matched, OR HWHP Only is selected (no base needed).
     const isHwhpOnly = productSet === 'HWHP Only'
-    if (!matchedPackage && !isHwhpOnly) {
+    if (!matchedPackage && !isHwhpOnly && !isWaterFilterOnly) {
       console.error('Cannot save: no matched package')
       return
     }
@@ -1030,7 +1035,7 @@ export default function QuoteBuilder() {
   // canQuote: whether we have enough data to produce a valid price and allow save.
   // True if a base package matched, OR the user picked HWHP Only, OR they toggled HVAC on
   // (since HVAC as add-on can accompany ANY base — including no base).
-  const canQuote = !!matchedPackage || isHwhpOnly
+  const canQuote = !!matchedPackage || isHwhpOnly || (isWaterFilterOnly && !!selectedWaterFilter)
 
   const packageDescription = [
     includesBattery ? `${brand}-${batteryKwh}kWh battery` : null,
@@ -1273,16 +1278,18 @@ export default function QuoteBuilder() {
                 <label className="flex items-center gap-2 cursor-pointer flex-shrink-0 pl-1 pr-1.5">
                   <input
                     type="checkbox"
-                    checked={isWaterFilterIncluded}
+                    checked={includesWaterFilter}
+                    disabled={isWaterFilterOnly}
                     onChange={e => setIsWaterFilterIncluded(e.target.checked)}
-                    className="w-4 h-4 accent-blue-600 dark:accent-blue-400"
+                    className="w-4 h-4 accent-blue-600 dark:accent-blue-400 disabled:opacity-60"
+                    title={isWaterFilterOnly ? 'Included by the selected product type' : undefined}
                   />
                   <span className="text-xs text-gray-600 dark:text-gray-400 select-none">Add</span>
                 </label>
                 <select
                   value={selectedWaterFilterId ?? ''}
                   onChange={e => setSelectedWaterFilterId(Number(e.target.value))}
-                  disabled={!isWaterFilterIncluded || waterFilterProducts.length === 0}
+                  disabled={!includesWaterFilter || waterFilterProducts.length === 0}
                   className="flex-1 min-w-0 h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm disabled:bg-gray-50 dark:disabled:bg-gray-900/50 disabled:text-gray-400 dark:disabled:text-gray-600 disabled:cursor-not-allowed"
                 >
                   {waterFilterProducts.length === 0 ? (
@@ -1296,7 +1303,9 @@ export default function QuoteBuilder() {
               <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Package</label>
               <div className="flex flex-col md:flex-row md:items-center gap-1.5 md:gap-2 min-w-0">
                 <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded break-all md:break-normal">
-                  {productSet === 'HWHP Only' ? 'HWHP Only (add-on)' : (matchedPackage?.package_code ?? 'No match')}
+                  {productSet === 'HWHP Only' ? 'HWHP Only (add-on)'
+                    : isWaterFilterOnly ? 'Water Filter Only (add-on)'
+                    : (matchedPackage?.package_code ?? 'No match')}
                 </code>
                 <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500 md:truncate">{packageDescription}</span>
               </div>
