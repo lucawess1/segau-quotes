@@ -40,7 +40,7 @@ type SavedQuote = {
 type HwhpProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; stc_value: number; active: boolean }
 type HvacProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; active: boolean }
 type WaterFilterProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; total_filters: number | null; cartridge_1: string | null; cartridge_2: string | null; cartridge_3: string | null; active: boolean }
-type RetailConfig = { hwhp_combo_discount: number; water_filter_combo_discount: number }
+type RetailConfig = { hwhp_combo_discount: number; water_filter_combo_discount_hwhp: number; water_filter_combo_discount_base: number }
 type InverterUpgrade = {
   id: number; code: string; brand: string; inverter_model: string
   previous_inverter_model: string | null
@@ -222,7 +222,10 @@ export default function QuoteBuilder() {
   const [hwhpProducts, setHwhpProducts] = useState<HwhpProduct[]>([])
   const [hvacProducts, setHvacProducts] = useState<HvacProduct[]>([])
   const [waterFilterProducts, setWaterFilterProducts] = useState<WaterFilterProduct[]>([])
-  const [retailConfig, setRetailConfig] = useState<RetailConfig>({ hwhp_combo_discount: 600, water_filter_combo_discount: 800 })
+  // Per-dollar fortnightly rate per finance term, derived from real price_variants rows. Only used
+  // for add-on-only quotes (no base package), where there's no variant to scale a repayment from.
+  const [fortnightlyRates, setFortnightlyRates] = useState<Record<string, number>>({})
+  const [retailConfig, setRetailConfig] = useState<RetailConfig>({ hwhp_combo_discount: 600, water_filter_combo_discount_hwhp: 800, water_filter_combo_discount_base: 600 })
   const [selectedHwhpId, setSelectedHwhpId] = useState<number | null>(null)
   const [isHvacIncluded, setIsHvacIncluded] = useState<boolean>(false)
   const [selectedHvacId, setSelectedHvacId] = useState<number | null>(null)
@@ -244,11 +247,6 @@ export default function QuoteBuilder() {
   // Rule: $600 combo discount fires when HWHP is combined with a non-HWHP-only base product.
   const hasNonHwhpBase = productSet !== 'HWHP Only' && (includesSolar || includesBattery)
 
-  // Water filter combo rule: the $800 fires when the filter is sold alongside any other real
-  // product — a Solar/Battery package or a HWHP — but NOT when it's on its own, and not when
-  // the only other thing on the quote is HVAC.
-  const hasNonWaterFilterProduct = includesSolar || includesBattery || includesHwhp
-
   useEffect(() => {
     // Extras: cache-first load with timeout. Extras change rarely so we cache for 1h.
     loadExtrasWithCache()
@@ -264,12 +262,17 @@ export default function QuoteBuilder() {
   }, [])
 
   const loadAddOnProducts = async () => {
-    const [hwhpRes, hvacRes, waterFilterRes, cfgRes, inverterUpgradeRes] = await Promise.all([
+    const [hwhpRes, hvacRes, waterFilterRes, cfgRes, inverterUpgradeRes, fnRateRes] = await Promise.all([
       supabase.from('hwhp_products').select('*').eq('active', true).order('model'),
       supabase.from('hvac_products').select('*').eq('active', true).order('model'),
       supabase.from('water_filters').select('*').eq('active', true).order('model'),
       supabase.from('retail_config').select('*').eq('id', 1).single(),
       supabase.from('inverter_upgrades').select('*').eq('active', true).order('inverter_model'),
+      supabase.from('price_variants')
+        .select('finance_term, price_after_stc, fortnightly_repay')
+        .gt('price_after_stc', 0)
+        .not('fortnightly_repay', 'is', null)
+        .limit(500),
     ])
     if (hwhpRes.data) setHwhpProducts(hwhpRes.data as HwhpProduct[])
     if (waterFilterRes.data) setWaterFilterProducts(waterFilterRes.data as WaterFilterProduct[])
@@ -286,6 +289,21 @@ export default function QuoteBuilder() {
       setHvacProducts(sorted)
     }
     if (cfgRes.data) setRetailConfig(cfgRes.data as RetailConfig)
+    if (fnRateRes.data) {
+      // Average fortnightly-per-dollar by term. If BNPL is a flat term division this ratio is
+      // identical on every row, so the average is exact rather than an approximation.
+      const acc: Record<string, { n: number; sum: number }> = {}
+      for (const r of fnRateRes.data as { finance_term: string | null; price_after_stc: number | null; fortnightly_repay: number | null }[]) {
+        if (!r.finance_term || !r.price_after_stc || r.fortnightly_repay == null) continue
+        const a = acc[r.finance_term] ?? { n: 0, sum: 0 }
+        a.n += 1
+        a.sum += r.fortnightly_repay / r.price_after_stc
+        acc[r.finance_term] = a
+      }
+      const rates: Record<string, number> = {}
+      for (const [term, a] of Object.entries(acc)) rates[term] = a.sum / a.n
+      setFortnightlyRates(rates)
+    }
   }
 
   // Default-select HWHP when it becomes required, and clear when not
@@ -778,10 +796,18 @@ export default function QuoteBuilder() {
     return c ?? 0
   }, [includesWaterFilter, selectedWaterFilter, territory])
 
-  // Combo discounts: HWHP's $600 when paired with a non-HWHP base, the water filter's $800 when
-  // paired with any other real product. They do NOT stack — only the larger of the two applies.
+  // Combo discounts. The water filter's is tiered: $800 when paired with a HWHP, $600 when paired
+  // with a Solar/Battery package instead, and nothing when the filter is sold on its own (or only
+  // alongside HVAC, which doesn't attract a combo).
   const hwhpComboDiscountRaw = includesHwhp && hasNonHwhpBase ? retailConfig.hwhp_combo_discount : 0
-  const waterFilterComboDiscountRaw = includesWaterFilter && hasNonWaterFilterProduct ? retailConfig.water_filter_combo_discount : 0
+  const waterFilterComboDiscountRaw = !includesWaterFilter
+    ? 0
+    : includesHwhp
+      ? retailConfig.water_filter_combo_discount_hwhp
+      : (includesSolar || includesBattery)
+        ? retailConfig.water_filter_combo_discount_base
+        : 0
+  // They do NOT stack — only the larger of the two applies.
   const comboDiscount = Math.max(hwhpComboDiscountRaw, waterFilterComboDiscountRaw)
 
   // Inverter upgrade: flat $ on top of the base package, replacing the standard inverter.
@@ -801,7 +827,11 @@ export default function QuoteBuilder() {
   // Fortnightly scaling — proportional to how much cash moved from the raw variant price to the composed price
   const rawAfterStc = variant?.price_after_stc ?? 0
   const rawFortnightly = variant?.fortnightly_repay ?? 0
-  const fortnightly = rawAfterStc > 0 ? rawFortnightly * (afterStc / rawAfterStc) : 0
+  // With a base package, scale its own repayment. Without one (HWHP Only / Water Filter Only), fall
+  // back to the term's per-dollar rate so add-on-only quotes still show a repayment instead of $0.
+  const fortnightly = rawAfterStc > 0
+    ? rawFortnightly * (afterStc / rawAfterStc)
+    : (fortnightlyRates[financeTerm] ?? 0) * afterStc
 
   const quotedItems = selectedExtras.filter(e => e.charge_type === 'QUOTED').length
 
