@@ -40,7 +40,7 @@ type SavedQuote = {
 type HwhpProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; stc_value: number; active: boolean }
 type HvacProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; active: boolean }
 type WaterFilterProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; total_filters: number | null; cartridge_1: string | null; cartridge_2: string | null; cartridge_3: string | null; active: boolean }
-type RetailConfig = { hwhp_combo_discount: number; water_filter_combo_discount_hwhp: number; water_filter_combo_discount_base: number }
+type RetailConfig = { hwhp_combo_discount: number; water_filter_combo_discount_hwhp?: number; water_filter_combo_discount_base?: number }
 type InverterUpgrade = {
   id: number; code: string; brand: string; inverter_model: string
   previous_inverter_model: string | null
@@ -790,6 +790,9 @@ export default function QuoteBuilder() {
     return c ?? 0
   }, [includesWaterFilter, selectedWaterFilter, territory])
 
+  // Fallbacks below matter: retail_config is loaded with select('*') and overwrites the state
+  // default wholesale, so if this code ships before the new columns exist the values come back
+  // undefined and Math.max(600, undefined) is NaN — which would poison the entire quote total.
   // Combo discounts. The water filter's is tiered: $800 when paired with a HWHP, $600 when paired
   // with a Solar/Battery package instead, and nothing when the filter is sold on its own (or only
   // alongside HVAC, which doesn't attract a combo).
@@ -797,9 +800,9 @@ export default function QuoteBuilder() {
   const waterFilterComboDiscountRaw = !includesWaterFilter
     ? 0
     : includesHwhp
-      ? retailConfig.water_filter_combo_discount_hwhp
+      ? (retailConfig.water_filter_combo_discount_hwhp ?? 800)
       : (includesSolar || includesBattery)
-        ? retailConfig.water_filter_combo_discount_base
+        ? (retailConfig.water_filter_combo_discount_base ?? 600)
         : 0
   // They do NOT stack — only the larger of the two applies.
   const comboDiscount = Math.max(hwhpComboDiscountRaw, waterFilterComboDiscountRaw)
