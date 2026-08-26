@@ -39,7 +39,8 @@ type SavedQuote = {
 
 type HwhpProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; stc_value: number; active: boolean }
 type HvacProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; active: boolean }
-type RetailConfig = { hwhp_combo_discount: number }
+type WaterFilterProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; active: boolean }
+type RetailConfig = { hwhp_combo_discount: number; water_filter_combo_discount: number }
 type InverterUpgrade = {
   id: number; code: string; brand: string; inverter_model: string
   previous_inverter_model: string | null
@@ -224,12 +225,16 @@ export default function QuoteBuilder() {
   // NEW composable add-on state:
   // - HWHP: selected product from hwhp_products (when includesHwhp)
   // - HVAC: toggle + selected product from hvac_products
+  // - Water filter: toggle + selected product from water_filters
   const [hwhpProducts, setHwhpProducts] = useState<HwhpProduct[]>([])
   const [hvacProducts, setHvacProducts] = useState<HvacProduct[]>([])
-  const [retailConfig, setRetailConfig] = useState<RetailConfig>({ hwhp_combo_discount: 600 })
+  const [waterFilterProducts, setWaterFilterProducts] = useState<WaterFilterProduct[]>([])
+  const [retailConfig, setRetailConfig] = useState<RetailConfig>({ hwhp_combo_discount: 600, water_filter_combo_discount: 800 })
   const [selectedHwhpId, setSelectedHwhpId] = useState<number | null>(null)
   const [isHvacIncluded, setIsHvacIncluded] = useState<boolean>(false)
   const [selectedHvacId, setSelectedHvacId] = useState<number | null>(null)
+  const [isWaterFilterIncluded, setIsWaterFilterIncluded] = useState<boolean>(false)
+  const [selectedWaterFilterId, setSelectedWaterFilterId] = useState<number | null>(null)
   const [inverterUpgrades, setInverterUpgrades] = useState<InverterUpgrade[]>([])
   const [selectedInverterUpgradeId, setSelectedInverterUpgradeId] = useState<number | null>(null)
 
@@ -247,10 +252,16 @@ export default function QuoteBuilder() {
   const includesSolar = HAS_SOLAR.includes(productSet)
   const includesHwhp = HAS_HWHP.includes(productSet)
   const includesHvac = isHvacIncluded  // now derived from toggle, not product_set
+  const includesWaterFilter = isWaterFilterIncluded  // toggle-driven add-on, same as HVAC
 
   // Whether the current product includes any base product (Solar/Battery). Used for HWHP combo discount rule.
   // Rule: $600 combo discount fires when HWHP is combined with a non-HWHP-only base product.
   const hasNonHwhpBase = productSet !== 'HWHP Only' && (includesSolar || includesBattery)
+
+  // Water filter combo rule: the $800 fires when the filter is sold alongside any other real
+  // product — a Solar/Battery package or a HWHP — but NOT when it's on its own, and not when
+  // the only other thing on the quote is HVAC.
+  const hasNonWaterFilterProduct = includesSolar || includesBattery || includesHwhp
 
   useEffect(() => {
     // Extras: cache-first load with timeout. Extras change rarely so we cache for 1h.
@@ -267,13 +278,15 @@ export default function QuoteBuilder() {
   }, [])
 
   const loadAddOnProducts = async () => {
-    const [hwhpRes, hvacRes, cfgRes, inverterUpgradeRes] = await Promise.all([
+    const [hwhpRes, hvacRes, waterFilterRes, cfgRes, inverterUpgradeRes] = await Promise.all([
       supabase.from('hwhp_products').select('*').eq('active', true).order('model'),
       supabase.from('hvac_products').select('*').eq('active', true).order('model'),
+      supabase.from('water_filters').select('*').eq('active', true).order('model'),
       supabase.from('retail_config').select('*').eq('id', 1).single(),
       supabase.from('inverter_upgrades').select('*').eq('active', true).order('inverter_model'),
     ])
     if (hwhpRes.data) setHwhpProducts(hwhpRes.data as HwhpProduct[])
+    if (waterFilterRes.data) setWaterFilterProducts(waterFilterRes.data as WaterFilterProduct[])
     if (inverterUpgradeRes.data) setInverterUpgrades(inverterUpgradeRes.data as InverterUpgrade[])
     if (hvacRes.data) {
       // Order HVAC list: inverter splits first (smaller units, more common), ducted last (larger, less common).
@@ -307,8 +320,18 @@ export default function QuoteBuilder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHvacIncluded, hvacProducts])
 
+  // Default-select the water filter when its toggle turns on, clear when off
+  useEffect(() => {
+    if (isWaterFilterIncluded && waterFilterProducts.length > 0 && !selectedWaterFilterId) {
+      setSelectedWaterFilterId(waterFilterProducts[0].id)
+    }
+    if (!isWaterFilterIncluded) setSelectedWaterFilterId(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWaterFilterIncluded, waterFilterProducts])
+
   const selectedHwhp = hwhpProducts.find(h => h.id === selectedHwhpId) || null
   const selectedHvac = hvacProducts.find(h => h.id === selectedHvacId) || null
+  const selectedWaterFilter = waterFilterProducts.find(w => w.id === selectedWaterFilterId) || null
 
   // HVAC model strings are formatted "{Type} HVAC {size/code}" (e.g. "Inverter split HVAC 3.5kW
   // HSNRT35B") — split that out so the spec panel can show Type and Model as separate rows
@@ -762,19 +785,29 @@ export default function QuoteBuilder() {
     return c ?? 0
   }, [includesHvac, selectedHvac, territory])
 
-  // $600 combo discount only when HWHP is combined with a non-HWHP base product
-  const hwhpComboDiscount = includesHwhp && hasNonHwhpBase ? retailConfig.hwhp_combo_discount : 0
+  // Water filter add-on: pick metro or regional cost based on territory (no STC — not an energy product)
+  const waterFilterCost = useMemo(() => {
+    if (!includesWaterFilter || !selectedWaterFilter) return 0
+    const c = territory === 'Regional' ? selectedWaterFilter.cost_regional : selectedWaterFilter.cost_metro
+    return c ?? 0
+  }, [includesWaterFilter, selectedWaterFilter, territory])
+
+  // Combo discounts: HWHP's $600 when paired with a non-HWHP base, the water filter's $800 when
+  // paired with any other real product. They do NOT stack — only the larger of the two applies.
+  const hwhpComboDiscountRaw = includesHwhp && hasNonHwhpBase ? retailConfig.hwhp_combo_discount : 0
+  const waterFilterComboDiscountRaw = includesWaterFilter && hasNonWaterFilterProduct ? retailConfig.water_filter_combo_discount : 0
+  const comboDiscount = Math.max(hwhpComboDiscountRaw, waterFilterComboDiscountRaw)
 
   // Inverter upgrade: flat $ on top of the base package, replacing the standard inverter.
   // STC does not change with an upgrade (STC depends on panels + battery only).
   const upgradeCost = selectedInverterUpgrade?.price_upgrade ?? 0
 
   // The base package price already reflects the selected finance term (its own price_variants row).
-  // HWHP/HVAC/inverter-upgrade costs are flat cash-basis $ amounts though, so — same as the inbound/asc
+  // HWHP/HVAC/water-filter/inverter-upgrade costs are flat cash-basis $ amounts though, so — same as the inbound/asc
   // pages — their net cash effect is scaled to the finance term's BNPL-equivalent (÷0.80 for 60m,
   // ÷0.70 for 84m) before being added to the base package's own already-correct after-STC price.
   const financeMultiplier = financeTerm === 'Cash' ? 1 : financeTerm === '60m' ? 0.80 : 0.70
-  const addOnNetCash = hwhpCost - hwhpStc + hvacCost + upgradeCost - hwhpComboDiscount
+  const addOnNetCash = hwhpCost - hwhpStc + hvacCost + waterFilterCost + upgradeCost - comboDiscount
   const afterStc = Math.max(0, basePriceAfterStc + addOnNetCash / financeMultiplier)
   const stc = baseStc + hwhpStc
   const base = afterStc + stc
@@ -1004,6 +1037,7 @@ export default function QuoteBuilder() {
     includesSolar && panels > 0 ? `${systemSize}kW PV` : null,
     includesHwhp && selectedHwhp ? selectedHwhp.model : null,
     includesHvac && selectedHvac ? selectedHvac.model : null,
+    includesWaterFilter && selectedWaterFilter ? selectedWaterFilter.model : null,
     inverterCode ? `${inverterCode}${inverterParalleled ? ' ×2 paralleled' : ''}` : null,
     selectedInverterUpgrade ? `${selectedInverterUpgrade.inverter_model} (upgraded)` : null,
   ].filter(Boolean).join(' + ') || 'Nothing selected'
@@ -1234,6 +1268,31 @@ export default function QuoteBuilder() {
                 </select>
               </div>
 
+              <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Water filter</label>
+              <div className="flex items-center gap-2 min-w-0">
+                <label className="flex items-center gap-2 cursor-pointer flex-shrink-0 pl-1 pr-1.5">
+                  <input
+                    type="checkbox"
+                    checked={isWaterFilterIncluded}
+                    onChange={e => setIsWaterFilterIncluded(e.target.checked)}
+                    className="w-4 h-4 accent-blue-600 dark:accent-blue-400"
+                  />
+                  <span className="text-xs text-gray-600 dark:text-gray-400 select-none">Add</span>
+                </label>
+                <select
+                  value={selectedWaterFilterId ?? ''}
+                  onChange={e => setSelectedWaterFilterId(Number(e.target.value))}
+                  disabled={!isWaterFilterIncluded || waterFilterProducts.length === 0}
+                  className="flex-1 min-w-0 h-11 md:h-9 px-3 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-base md:text-sm disabled:bg-gray-50 dark:disabled:bg-gray-900/50 disabled:text-gray-400 dark:disabled:text-gray-600 disabled:cursor-not-allowed"
+                >
+                  {waterFilterProducts.length === 0 ? (
+                    <option value="">No water filter models configured</option>
+                  ) : (
+                    waterFilterProducts.map(w => <option key={w.id} value={w.id}>{w.model}</option>)
+                  )}
+                </select>
+              </div>
+
               <label className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Package</label>
               <div className="flex flex-col md:flex-row md:items-center gap-1.5 md:gap-2 min-w-0">
                 <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded break-all md:break-normal">
@@ -1432,7 +1491,7 @@ export default function QuoteBuilder() {
               <Line label={`STC discount (ZN${zone})`} value={`−${formatCurrency(stc)}`} valueColor="text-green-600 dark:text-green-400" />
             </div>
 
-            {(matchedPackage || (includesHwhp && selectedHwhp) || (includesHvac && selectedHvac)) && (
+            {(matchedPackage || (includesHwhp && selectedHwhp) || (includesHvac && selectedHvac) || (includesWaterFilter && selectedWaterFilter)) && (
               <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
                 <p className="text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-500 mb-2">Specifications</p>
                 <div className="space-y-2">
@@ -1487,6 +1546,12 @@ export default function QuoteBuilder() {
                         )
                       })()}
                       {selectedHvac.brand && <SpecRow label="Brand" value={selectedHvac.brand} />}
+                    </SpecGroup>
+                  )}
+                  {includesWaterFilter && selectedWaterFilter && (
+                    <SpecGroup title="Water filter">
+                      <SpecRow label="Model" value={selectedWaterFilter.model} />
+                      {selectedWaterFilter.brand && <SpecRow label="Brand" value={selectedWaterFilter.brand} />}
                     </SpecGroup>
                   )}
                 </div>

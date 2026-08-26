@@ -21,7 +21,7 @@ type MergeResult = {
 }
 
 type StagingTable = {
-  key: 'packages' | 'price_variants' | 'discounts' | 'hwhp_products' | 'hvac_products' | 'inverter_upgrades'
+  key: 'packages' | 'price_variants' | 'discounts' | 'hwhp_products' | 'hvac_products' | 'water_filters' | 'inverter_upgrades'
   label: string
   tableName: string
   functionName: string
@@ -76,6 +76,13 @@ const STAGING_TABLES: StagingTable[] = [
     tableName: 'hvac_products_staging',
     functionName: 'merge_hvac_products',
     description: 'Upsert HVAC add-on models (code, brand, model, cost_metro, cost_regional, active).',
+  },
+  {
+    key: 'water_filters',
+    label: 'Water filters',
+    tableName: 'water_filters_staging',
+    functionName: 'merge_water_filters',
+    description: 'Upsert water filter add-on models (code, brand, model, cost_metro, cost_regional, per-channel discounts, active).',
   },
   {
     key: 'inverter_upgrades',
