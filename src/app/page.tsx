@@ -274,7 +274,17 @@ export default function QuoteBuilder() {
       supabase.from('inverter_upgrades').select('*').eq('active', true).order('inverter_model'),
     ])
     if (hwhpRes.data) setHwhpProducts(hwhpRes.data as HwhpProduct[])
-    if (waterFilterRes.data) setWaterFilterProducts(waterFilterRes.data as WaterFilterProduct[])
+    if (waterFilterRes.data) {
+      // Town Water first so it's the default selection — it's the common case, and it would
+      // otherwise sort behind Tank/Rain alphabetically ('Tan' < 'Tow').
+      const sorted = [...(waterFilterRes.data as WaterFilterProduct[])].sort((a, b) => {
+        const aTown = a.model.toLowerCase().includes('town') ? 0 : 1
+        const bTown = b.model.toLowerCase().includes('town') ? 0 : 1
+        if (aTown !== bTown) return aTown - bTown       // Town Water (0) before everything else (1)
+        return a.model.localeCompare(b.model)           // stable within group
+      })
+      setWaterFilterProducts(sorted)
+    }
     if (inverterUpgradeRes.data) setInverterUpgrades(inverterUpgradeRes.data as InverterUpgrade[])
     if (hvacRes.data) {
       // Order HVAC list: inverter splits first (smaller units, more common), ducted last (larger, less common).
