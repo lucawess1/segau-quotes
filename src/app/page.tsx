@@ -839,7 +839,9 @@ export default function QuoteBuilder() {
   const previewAddOnDelta = (extraCashDelta: number) => {
     const hypAfterStc = Math.max(0, basePriceAfterStc + (addOnNetCash + extraCashDelta) / financeMultiplier)
     const hypTotal = hypAfterStc + extrasTotal
-    const hypFortnightly = rawAfterStc > 0 ? rawFortnightly * (hypAfterStc / rawAfterStc) : 0
+    const hypFortnightly = BNPL_FORTNIGHTS[financeTerm]
+      ? hypAfterStc / BNPL_FORTNIGHTS[financeTerm] + BNPL_FORTNIGHTLY_FEE
+      : 0
     return { deltaTotal: hypTotal - total, deltaFortnightly: hypFortnightly - fortnightly }
   }
 
