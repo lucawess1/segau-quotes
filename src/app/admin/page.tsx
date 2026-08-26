@@ -82,7 +82,7 @@ const STAGING_TABLES: StagingTable[] = [
     label: 'Water filters',
     tableName: 'water_filters_staging',
     functionName: 'merge_water_filters',
-    description: 'Upsert water filter add-on models (code, brand, model, cost_metro, cost_regional, per-channel discounts, active).',
+    description: 'Upsert water filter add-on models (code, brand, model, cost_metro, cost_regional, per-channel discounts, filter count + cartridges, active).',
   },
   {
     key: 'inverter_upgrades',
