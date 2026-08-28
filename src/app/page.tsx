@@ -818,12 +818,16 @@ export default function QuoteBuilder() {
   const financeMultiplier = financeTerm === 'Cash' ? 1 : financeTerm === '60m' ? 0.80 : 0.70
   const addOnNetCash = hwhpCost - hwhpStc + hvacCost + waterFilterCost + upgradeCost - comboDiscount
   const afterStc = Math.max(0, basePriceAfterStc + addOnNetCash / financeMultiplier)
+  // Extras are financed with the rest of the job, so they take the same BNPL uplift as the other
+  // flat cash costs (÷0.80 for 60m, ÷0.70 for 84m) instead of being added at face value, and they
+  // form part of the financed principal the repayment is calculated from.
+  const extrasFinanced = extrasTotal / financeMultiplier
   const stc = baseStc + hwhpStc
   const base = afterStc + stc
-  const total = afterStc + extrasTotal
+  const total = afterStc + extrasFinanced
   // Fortnightly scaling — proportional to how much cash moved from the raw variant price to the composed price
   const fortnightly = BNPL_FORTNIGHTS[financeTerm]
-    ? afterStc / BNPL_FORTNIGHTS[financeTerm] + BNPL_FORTNIGHTLY_FEE
+    ? total / BNPL_FORTNIGHTS[financeTerm] + BNPL_FORTNIGHTLY_FEE
     : 0
 
   const quotedItems = selectedExtras.filter(e => e.charge_type === 'QUOTED').length
@@ -928,7 +932,7 @@ export default function QuoteBuilder() {
         finance_term: financeTerm,
         base_price: base,
         stc_discount: stc,
-        extras_total: extrasTotal,
+        extras_total: extrasFinanced,
         total_price: total,
         status: 'draft',
         pricing_version_id: pricingVersionId,
@@ -953,7 +957,7 @@ export default function QuoteBuilder() {
           quote_id: quoteRow.id,
           extra_id: e.id,
           quantity: e.charge_type === 'Per Panel' ? panels : 1,
-          line_total: e.charge_type === 'Per Panel' ? price * panels : price,
+          line_total: (e.charge_type === 'Per Panel' ? price * panels : price) / financeMultiplier,
         }
       })
       const { error: extrasError } = await supabase.from('quote_extras').insert(extrasRows)
@@ -1429,8 +1433,8 @@ export default function QuoteBuilder() {
 
             <div className="mt-3 text-sm space-y-1">
               <Line label="Base package" value={formatCurrency(base)} indent />
-              <Line label={`Extras (${selectedExtras.length})`} value={formatCurrency(extrasTotal)} indent />
-              <Line label="Total System Amount (Before Rebates)" value={formatCurrency(base + extrasTotal)} emphasize />
+              <Line label={`Extras (${selectedExtras.length})`} value={formatCurrency(extrasFinanced)} indent />
+              <Line label="Total System Amount (Before Rebates)" value={formatCurrency(base + extrasFinanced)} emphasize />
               <Line label={`STC discount (ZN${zone})`} value={`−${formatCurrency(stc)}`} valueColor="text-green-600 dark:text-green-400" />
             </div>
 

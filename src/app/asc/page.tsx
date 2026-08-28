@@ -824,12 +824,16 @@ export default function QuoteBuilder() {
   // ASC finance terms: Cash = 1.0, 60m = 0.80 (no 84m available)
   const financeMultiplier = financeTerm === 'Cash' ? 1 : 0.80
   const afterStc = discountedCashAfterStc / financeMultiplier
+  // Extras are financed with the rest of the job, so they take the same BNPL uplift as the other
+  // flat cash costs (÷0.80 for 60m, ÷0.70 for 84m) instead of being added at face value, and they
+  // form part of the financed principal the repayment is calculated from.
+  const extrasFinanced = extrasTotal / financeMultiplier
   const base = afterStc + stc
-  const total = afterStc + extrasTotal
+  const total = afterStc + extrasFinanced
 
   // Fortnightly: scale the standard fortnightly proportionally based on price movement
   const fortnightly = BNPL_FORTNIGHTS[financeTerm]
-    ? afterStc / BNPL_FORTNIGHTS[financeTerm] + BNPL_FORTNIGHTLY_FEE
+    ? total / BNPL_FORTNIGHTS[financeTerm] + BNPL_FORTNIGHTLY_FEE
     : 0
 
   const quotedItems = selectedExtras.filter(e => e.charge_type === 'QUOTED').length
@@ -931,7 +935,7 @@ export default function QuoteBuilder() {
         finance_term: financeTerm,
         base_price: base,
         stc_discount: stc,
-        extras_total: extrasTotal,
+        extras_total: extrasFinanced,
         total_price: total,
         status: 'draft',
         is_asc_pricing: true,
@@ -955,7 +959,7 @@ export default function QuoteBuilder() {
           quote_id: quoteRow.id,
           extra_id: e.id,
           quantity: e.charge_type === 'Per Panel' ? panels : 1,
-          line_total: e.charge_type === 'Per Panel' ? price * panels : price,
+          line_total: (e.charge_type === 'Per Panel' ? price * panels : price) / financeMultiplier,
         }
       })
       const { error: extrasError } = await supabase.from('quote_extras').insert(extrasRows)
@@ -1432,8 +1436,8 @@ export default function QuoteBuilder() {
 
             <div className="mt-3 text-sm space-y-1">
               <Line label="Base package" value={formatCurrency(base)} indent />
-              <Line label={`Extras (${selectedExtras.length})`} value={formatCurrency(extrasTotal)} indent />
-              <Line label="Total System Amount (Before Rebates)" value={formatCurrency(base + extrasTotal)} emphasize />
+              <Line label={`Extras (${selectedExtras.length})`} value={formatCurrency(extrasFinanced)} indent />
+              <Line label="Total System Amount (Before Rebates)" value={formatCurrency(base + extrasFinanced)} emphasize />
               <Line label={`STC discount (ZN${zone})`} value={`−${formatCurrency(stc)}`} valueColor="text-green-600 dark:text-green-400" />
             </div>
 
