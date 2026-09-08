@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Package, PriceVariant, Extra } from '@/lib/supabase'
 import { Zap, User, Plus, X, Save, Info, Check, History, LogOut, ChevronDown, Sparkles } from 'lucide-react'
+import SalesforceBreakdown from '@/components/SalesforceBreakdown'
 
 // Single Supabase client instance for this module
 const supabase = createClient()
@@ -888,6 +889,26 @@ export default function QuoteBuilder() {
     const cost = (territory === 'Regional' ? cheapestHvac.cost_regional : cheapestHvac.cost_metro) ?? 0
     return previewAddOnDelta(cost)
   })() : null
+  // Per-product prices for the Salesforce "Payment Information" fields. Each is the GROSS price on
+  // the selected finance term, before STC — Salesforce subtracts the STC value itself. The HWHP line
+  // therefore adds its own STC back on top of the finance-uplifted net cash, so the rebate Salesforce
+  // reports stays the real certificate value rather than a BNPL-inflated one.
+  const hvacIsDucted = /ducted/i.test(selectedHvac?.model ?? '')
+  const salesforceProducts = {
+    solarBattery: basePriceAfterStc + baseStc + upgradeCost / financeMultiplier,
+    hwhp: includesHwhp ? hwhpStc + (hwhpCost - hwhpStc) / financeMultiplier : 0,
+    hvacSplit: includesHvac && !hvacIsDucted ? hvacCost / financeMultiplier : 0,
+    ducted: includesHvac && hvacIsDucted ? hvacCost / financeMultiplier : 0,
+    waterFilter: waterFilterCost / financeMultiplier,
+  }
+  const salesforceExtras = selectedExtras.map(e => {
+    const price = e.overridePrice ?? e.unit_price
+    return {
+      category: e.category,
+      name: e.name,
+      amount: (e.charge_type === 'Per Panel' ? price * panels : price) / financeMultiplier,
+    }
+  })
 
   const quotedItems = selectedExtras.filter(e => e.charge_type === 'QUOTED').length
 
@@ -1528,6 +1549,15 @@ export default function QuoteBuilder() {
               <Line label="Total System Amount (Before Rebates)" value={formatCurrency(base + extrasFinanced)} emphasize />
               <Line label={`STC discount (ZN${zone})`} value={`−${formatCurrency(stc)}`} valueColor="text-green-600 dark:text-green-400" />
             </div>
+
+            <SalesforceBreakdown
+              financeTerm={financeTerm}
+              products={salesforceProducts}
+              extras={salesforceExtras}
+              otherRebates={comboDiscount / financeMultiplier}
+              stcTotal={stc}
+              total={total}
+            />
 
             {(matchedPackage || (includesHwhp && selectedHwhp) || (includesHvac && selectedHvac) || (includesWaterFilter && selectedWaterFilter)) && (
               <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
