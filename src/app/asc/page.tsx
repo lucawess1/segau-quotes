@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Package, PriceVariant, Extra } from '@/lib/supabase'
 import { Zap, User, Plus, X, Save, Info, Check, History, LogOut, ChevronDown } from 'lucide-react'
+import SalesforceBreakdown from '@/components/SalesforceBreakdown'
 
 // Single Supabase client instance for this module
 const supabase = createClient()
@@ -836,6 +837,28 @@ export default function QuoteBuilder() {
     ? total / BNPL_FORTNIGHTS[financeTerm] + BNPL_FORTNIGHTLY_FEE
     : 0
 
+  // Per-product prices for the Salesforce "Payment Information" fields. Each is the GROSS price on
+  // the selected finance term, before STC — Salesforce subtracts the STC value itself. Everything is
+  // composed on the cash basis (product cost less its own asc discount) and then finance-uplifted,
+  // mirroring the total above; the HWHP line adds its real STC back on so the rebate Salesforce
+  // reports isn't BNPL-inflated.
+  const hvacIsDucted = /ducted/i.test(selectedHvac?.model ?? '')
+  const salesforceProducts = {
+    solarBattery: baseStc + (baseCashAfterStc - baseInboundDiscount + upgradeCost - upgradeAscDiscount) / financeMultiplier,
+    hwhp: includesHwhp ? hwhpStc + (hwhpCost - hwhpStc - hwhpAscDiscount) / financeMultiplier : 0,
+    hvacSplit: includesHvac && !hvacIsDucted ? (hvacCost - hvacAscDiscount) / financeMultiplier : 0,
+    ducted: includesHvac && hvacIsDucted ? (hvacCost - hvacAscDiscount) / financeMultiplier : 0,
+    waterFilter: (waterFilterCost - waterFilterAscDiscount) / financeMultiplier,
+  }
+  const salesforceExtras = selectedExtras.map(e => {
+    const price = e.overridePrice ?? e.unit_price
+    return {
+      category: e.category,
+      name: e.name,
+      amount: (e.charge_type === 'Per Panel' ? price * panels : price) / financeMultiplier,
+    }
+  })
+
   const quotedItems = selectedExtras.filter(e => e.charge_type === 'QUOTED').length
 
   const addExtra = (e: Extra) => {
@@ -1446,6 +1469,15 @@ export default function QuoteBuilder() {
                 No inbound discount configured for this package — standard pricing shown.
               </p>
             )}
+
+            <SalesforceBreakdown
+              financeTerm={financeTerm}
+              products={salesforceProducts}
+              extras={salesforceExtras}
+              otherRebates={comboDiscount / financeMultiplier}
+              stcTotal={stc}
+              total={total}
+            />
 
             {(matchedPackage || (includesHwhp && selectedHwhp) || (includesHvac && selectedHvac) || (includesWaterFilter && selectedWaterFilter)) && (
               <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
