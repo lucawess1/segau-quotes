@@ -1474,7 +1474,8 @@ export default function QuoteBuilder() {
               financeTerm={financeTerm}
               products={salesforceProducts}
               extras={salesforceExtras}
-              otherRebates={comboDiscount / financeMultiplier}
+              financeMultiplier={financeMultiplier}
+              comboDiscount={comboDiscount}
               stcTotal={stc}
               total={total}
             />

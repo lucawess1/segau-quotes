@@ -69,12 +69,6 @@ export default function SalesforceBreakdown(props: BreakdownInput) {
   const [open, setOpen] = useState(true)
   const b = buildSalesforceBreakdown(props)
 
-  const copyAll = [
-    ['Payment type', b.paymentType],
-    ...b.rows.map(r => [r.label, raw(r.amount)]),
-    ...(b.otherRebates > 0 ? [['Total value of other rebates', raw(b.otherRebates)]] : []),
-  ].map(([k, v]) => `${k}\t${v}`).join('\n')
-
   return (
     <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
       <div className="flex items-center justify-between mb-2">
@@ -86,9 +80,6 @@ export default function SalesforceBreakdown(props: BreakdownInput) {
           {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
           Salesforce · Payment Information
         </button>
-        {open && (
-          <CopyButton value={copyAll} label="all Salesforce fields" />
-        )}
       </div>
 
       {open && (
@@ -104,27 +95,24 @@ export default function SalesforceBreakdown(props: BreakdownInput) {
 
           <FieldRow label="Payment type" display={b.paymentType} copyValue={b.paymentType} />
 
-          {b.rows.map(r => (
-            <FieldRow
-              key={r.key}
-              label={r.label}
-              display={money(r.amount)}
-              copyValue={raw(r.amount)}
-              note={r.extrasAmount !== 0
-                ? `incl. ${money(r.extrasAmount)} extras (${r.extrasNames.length})`
-                : undefined}
-              noteTitle={r.extrasNames.join(', ')}
-            />
-          ))}
-
-          {b.otherRebates > 0 && (
-            <FieldRow
-              label="Total value of other rebates"
-              display={money(b.otherRebates)}
-              copyValue={raw(b.otherRebates)}
-              note="Combo discount"
-            />
-          )}
+          {b.rows.map(r => {
+            // The combo discount is already inside `amount`; the note is there so a specialist can
+            // see why the line reads lower than the product's list price.
+            const notes = [
+              r.extrasAmount !== 0 ? `incl. ${money(r.extrasAmount)} extras (${r.extrasNames.length})` : null,
+              r.comboDiscount !== 0 ? `less ${money(r.comboDiscount)} combo` : null,
+            ].filter(Boolean)
+            return (
+              <FieldRow
+                key={r.key}
+                label={r.label}
+                display={money(r.amount)}
+                copyValue={raw(r.amount)}
+                note={notes.length > 0 ? notes.join(' · ') : undefined}
+                noteTitle={r.extrasNames.join(', ')}
+              />
+            )
+          })}
 
           <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 space-y-0.5">
             <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-1">Salesforce calculates these — check they match</p>
