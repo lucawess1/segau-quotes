@@ -2000,7 +2000,6 @@ function Badge({ type }: { type: string }) {
   return <span className={`text-[11px] px-1.5 py-0.5 rounded ${colors[type] ?? 'bg-gray-100 dark:bg-gray-800'}`}>{labels[type] ?? type}</span>
 }
 
-
 function SpecGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
