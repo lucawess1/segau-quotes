@@ -98,24 +98,18 @@ export default function SalesforceBreakdown({ zone, ...props }: BreakdownInput &
 
           <FieldRow label="Payment type" display={b.paymentType} copyValue={b.paymentType} />
 
-          {b.rows.map(r => {
-            // The combo discount is already inside `amount`; the note is there so a specialist can
-            // see why the line reads lower than the product's list price.
-            const notes = [
-              r.extrasAmount !== 0 ? `incl. ${money(r.extrasAmount)} extras (${r.extrasNames.length})` : null,
-              r.comboDiscount !== 0 ? `less ${money(r.comboDiscount)} combo` : null,
-            ].filter(Boolean)
-            return (
-              <FieldRow
-                key={r.key}
-                label={r.label}
-                display={money(r.amount)}
-                copyValue={raw(r.amount)}
-                note={notes.length > 0 ? notes.join(' · ') : undefined}
-                noteTitle={r.extrasNames.join(', ')}
-              />
-            )
-          })}
+          {b.rows.map(r => (
+            <FieldRow
+              key={r.key}
+              label={r.label}
+              display={money(r.amount)}
+              copyValue={raw(r.amount)}
+              note={r.extrasAmount !== 0
+                ? `incl. ${money(r.extrasAmount)} extras (${r.extrasNames.length})`
+                : undefined}
+              noteTitle={r.extrasNames.join(', ')}
+            />
+          ))}
 
           {/* Only worth a subtotal when it's a figure you can't already read off the card: more
               than one line to add up, and an STC deduction that makes it differ from the total. */}

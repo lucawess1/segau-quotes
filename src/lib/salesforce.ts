@@ -143,12 +143,10 @@ export type BreakdownInput = {
 export type BreakdownRow = {
   key: SalesforceProductKey
   label: string
-  /** Product price plus its extras, less its share of the combo. The number to type into Salesforce. */
+  /** Product price plus its extras, less its share of the combo — the number to type into Salesforce. */
   amount: number
   extrasAmount: number
   extrasNames: string[]
-  /** This line's share of the combo discount, financed — shown as a note, already inside `amount`. */
-  comboDiscount: number
 }
 
 export type SalesforceBreakdown = {
@@ -178,14 +176,14 @@ export function buildSalesforceBreakdown(input: BreakdownInput): SalesforceBreak
   const grossCash = Object.fromEntries(present.map(k => [k, (products[k] ?? 0) * financeMultiplier]))
   const allocation = allocateComboDiscount(grossCash, comboDiscount)
 
-  type Bucket = { amount: number; extrasAmount: number; extrasNames: string[]; combo: number }
+  type Bucket = { amount: number; extrasAmount: number; extrasNames: string[] }
   const buckets = new Map<SalesforceProductKey, Bucket>()
   for (const key of present) {
     const combo = (allocation[key] ?? 0) / financeMultiplier
-    buckets.set(key, { amount: (products[key] ?? 0) - combo, extrasAmount: 0, extrasNames: [], combo })
+    buckets.set(key, { amount: (products[key] ?? 0) - combo, extrasAmount: 0, extrasNames: [] })
   }
   if (!buckets.has(EXTRAS_CATCH_ALL)) {
-    buckets.set(EXTRAS_CATCH_ALL, { amount: 0, extrasAmount: 0, extrasNames: [], combo: 0 })
+    buckets.set(EXTRAS_CATCH_ALL, { amount: 0, extrasAmount: 0, extrasNames: [] })
   }
 
   for (const extra of extras) {
@@ -208,7 +206,6 @@ export function buildSalesforceBreakdown(input: BreakdownInput): SalesforceBreak
       amount: round2(b.amount),
       extrasAmount: round2(b.extrasAmount),
       extrasNames: b.extrasNames,
-      comboDiscount: round2(b.combo),
     }
   })
 
