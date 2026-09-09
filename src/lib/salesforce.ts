@@ -154,6 +154,8 @@ export type BreakdownRow = {
 export type SalesforceBreakdown = {
   paymentType: 'Cash' | 'BNPL'
   rows: BreakdownRow[]
+  /** Sum of the product lines — what Salesforce subtracts the STC value from. */
+  productsTotal: number
   stcTotal: number
   discountedPrice: number
   /**
@@ -224,6 +226,7 @@ export function buildSalesforceBreakdown(input: BreakdownInput): SalesforceBreak
     // Salesforce wants a 0 there. Only the synthetic catch-all line (an extras-only quote with no
     // extras) is dropped for being empty.
     rows: rows.filter(r => r.amount !== 0 || present.includes(r.key)),
+    productsTotal: round2(rows.reduce((s, r) => s + r.amount, 0)),
     stcTotal: round2(stcTotal),
     discountedPrice: round2(total),
     variance: Math.abs(rawVariance) < 0.05 ? 0 : round2(rawVariance),

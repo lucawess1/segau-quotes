@@ -1457,13 +1457,6 @@ export default function QuoteBuilder() {
               </span>
             </div>
 
-            <div className="mt-3 text-sm space-y-1">
-              <Line label="Base package" value={formatCurrency(base)} indent />
-              <Line label={`Extras (${selectedExtras.length})`} value={formatCurrency(extrasFinanced)} indent />
-              <Line label="Total System Amount (Before Rebates)" value={formatCurrency(base + extrasFinanced)} emphasize />
-              <Line label={`STC discount (ZN${zone})`} value={`−${formatCurrency(stc)}`} valueColor="text-green-600 dark:text-green-400" />
-            </div>
-
             {matchedPackage && inboundDiscount === 0 && (
               <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400 italic">
                 No inbound discount configured for this package — standard pricing shown.
@@ -1472,6 +1465,7 @@ export default function QuoteBuilder() {
 
             <SalesforceBreakdown
               financeTerm={financeTerm}
+              zone={zone}
               products={salesforceProducts}
               extras={salesforceExtras}
               financeMultiplier={financeMultiplier}
@@ -2006,18 +2000,6 @@ function Badge({ type }: { type: string }) {
   return <span className={`text-[11px] px-1.5 py-0.5 rounded ${colors[type] ?? 'bg-gray-100 dark:bg-gray-800'}`}>{labels[type] ?? type}</span>
 }
 
-function Line({ label, value, valueColor, indent, emphasize }: { label: string; value: string; valueColor?: string; indent?: boolean; emphasize?: boolean }) {
-  return (
-    <div className={`flex justify-between py-0.5 ${indent ? 'pl-3' : ''} ${
-      emphasize
-        ? 'mt-0.5 pt-1.5 border-t border-gray-200 dark:border-gray-700 font-medium text-gray-700 dark:text-gray-300'
-        : 'text-gray-500 dark:text-gray-400 dark:text-gray-500'
-    }`}>
-      <span>{label}</span>
-      <span className={valueColor ?? `text-gray-900 dark:text-gray-100 ${emphasize ? 'font-medium' : ''}`}>{value}</span>
-    </div>
-  )
-}
 
 function SpecGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (

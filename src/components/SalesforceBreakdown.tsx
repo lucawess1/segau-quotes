@@ -58,19 +58,22 @@ function FieldRow({ label, display, copyValue, note, noteTitle }: {
 }
 
 /**
- * The Salesforce "Payment Information" fields, filled in from the quote.
+ * The Salesforce "Payment Information" fields, filled in from the quote — and the summary card's
+ * only price breakdown, so every figure appears exactly once.
  *
- * Only the fields Salesforce leaves editable and that the quote actually determines are copyable;
- * STC value and discounted price are shown read-only as a cross-check against what Salesforce will
- * calculate, and the customer-specific fields (deposit, cash amount, Smart Savings) are named but
- * left to the specialist.
+ * Copyable rows are the fields Salesforce leaves editable and the quote determines. The STC value
+ * is read-only over there so it reads as a deduction here, and the discounted price it derives is
+ * the card's headline total rather than a repeated row. The products subtotal only appears when it
+ * isn't already readable off the card — one product line restates itself, and with no STC to deduct
+ * it restates the total.
  */
-export default function SalesforceBreakdown(props: BreakdownInput) {
+export default function SalesforceBreakdown({ zone, ...props }: BreakdownInput & { zone?: number | null }) {
   const [open, setOpen] = useState(true)
   const b = buildSalesforceBreakdown(props)
 
+  // The summary card's header block already draws the divider above this, so no border here.
   return (
-    <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+    <div className="mt-3">
       <div className="flex items-center justify-between mb-2">
         <button
           onClick={() => setOpen(!open)}
@@ -114,20 +117,30 @@ export default function SalesforceBreakdown(props: BreakdownInput) {
             )
           })}
 
-          <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 space-y-0.5">
-            <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-1">Salesforce calculates these — check they match</p>
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-500 dark:text-gray-400">System total STC value</span>
-              <span className="text-gray-600 dark:text-gray-300 tabular-nums">{money(b.stcTotal)}</span>
+          {/* Only worth a subtotal when it's a figure you can't already read off the card: more
+              than one line to add up, and an STC deduction that makes it differ from the total. */}
+          {b.rows.length > 1 && b.stcTotal > 0 && (
+            <div className="flex justify-between gap-2 pt-1.5 mt-0.5 border-t border-gray-100 dark:border-gray-800">
+              <span className="text-gray-500 dark:text-gray-400">Products before rebates</span>
+              <span className="text-gray-700 dark:text-gray-300 font-medium tabular-nums">{money(b.productsTotal)}</span>
             </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-500 dark:text-gray-400">System total discounted price</span>
-              <span className="text-gray-600 dark:text-gray-300 tabular-nums">{money(b.discountedPrice)}</span>
-            </div>
-          </div>
+          )}
 
-          <p className="pt-2 text-[11px] text-gray-400 dark:text-gray-500 leading-relaxed">
-            Deposit amount, Cash amount and Smart Savings come from the customer — this quote doesn&apos;t set them.
+          {b.stcTotal > 0 && (
+            <div className="flex items-start justify-between gap-2 py-0.5">
+              <div className="min-w-0">
+                <p className="text-gray-500 dark:text-gray-400 leading-snug">System total STC value</p>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 italic leading-snug">
+                  {zone ? `ZN${zone} · Salesforce calculates this` : 'Salesforce calculates this'}
+                </p>
+              </div>
+              <span className="text-green-600 dark:text-green-400 font-medium tabular-nums">−{money(b.stcTotal)}</span>
+            </div>
+          )}
+
+          <p className="mt-1.5 pt-2 border-t border-gray-100 dark:border-gray-800 text-[11px] text-gray-400 dark:text-gray-500 leading-relaxed">
+            Salesforce works the discounted price out from these — it should match the total above.
+            Deposit amount, Cash amount and Smart Savings come from the customer.
           </p>
         </div>
       )}
