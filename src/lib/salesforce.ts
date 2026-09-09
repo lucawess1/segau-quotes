@@ -31,6 +31,14 @@ const PRODUCT_ORDER: SalesforceProductKey[] = ['solarBattery', 'hwhp', 'hvacSpli
  */
 const WATER_FILTER_COMBO_SHARE = 500
 
+/**
+ * Where an extra goes when the keywords below don't attribute it to a product (and where a
+ * sub-cent rounding residual is absorbed). Solar/Battery is the main amount field in Salesforce, so
+ * it takes the catch-all even on a quote with no base package — an unrelated switchboard extra on
+ * an HWHP-only job reads better there than inflating the HWHP product's own price.
+ */
+const EXTRAS_CATCH_ALL: SalesforceProductKey = 'solarBattery'
+
 // Extras carry a free-text category (and name), not a product foreign key, so attribution is by
 // keyword. Order matters: "Ducted HVAC …" must land on `ducted` before the generic HVAC rule sees
 // it, and the water-filter rule runs before the hot-water one so "Water Filter" isn't read as HWHP.
@@ -150,7 +158,7 @@ export type SalesforceBreakdown = {
   discountedPrice: number
   /**
    * How far the product lines are from reconciling with the quote total. Sub-cent rounding is
-   * absorbed into the primary line and reported as 0; anything larger is a real disagreement
+   * absorbed into the Solar/Battery line and reported as 0; anything larger is a real disagreement
    * (e.g. the after-STC clamp kicking in) and the UI warns rather than quietly showing wrong numbers.
    */
   variance: number
@@ -162,8 +170,6 @@ export function buildSalesforceBreakdown(input: BreakdownInput): SalesforceBreak
   const { products, extras, comboDiscount, stcTotal, total, financeTerm, financeMultiplier } = input
 
   const present = PRODUCT_ORDER.filter(k => (products[k] ?? 0) > 0)
-  // Extras-only quotes still need somewhere to put the money; Solar/Battery is the catch-all.
-  const primary = present[0] ?? 'solarBattery'
 
   // The combo is allocated against cash-basis line values so the $500 water-filter share keeps its
   // meaning on a BNPL term; each share is then uplifted the same way the line itself was.
@@ -176,13 +182,16 @@ export function buildSalesforceBreakdown(input: BreakdownInput): SalesforceBreak
     const combo = (allocation[key] ?? 0) / financeMultiplier
     buckets.set(key, { amount: (products[key] ?? 0) - combo, extrasAmount: 0, extrasNames: [], combo })
   }
-  if (!buckets.has(primary)) buckets.set(primary, { amount: 0, extrasAmount: 0, extrasNames: [], combo: 0 })
+  if (!buckets.has(EXTRAS_CATCH_ALL)) {
+    buckets.set(EXTRAS_CATCH_ALL, { amount: 0, extrasAmount: 0, extrasNames: [], combo: 0 })
+  }
 
   for (const extra of extras) {
     const matched = attributeExtra(extra.category, extra.name)
-    // An extra can key to a product that isn't on this quote (an HWHP kit on a solar-only job) —
-    // in that case it belongs to the primary line rather than conjuring an empty Salesforce field.
-    const key = matched && buckets.has(matched) ? matched : primary
+    // An extra can key to a product that isn't on this quote (an HWHP kit on a solar-only job);
+    // that goes to the catch-all too rather than conjuring a Salesforce field for a product that
+    // isn't being installed.
+    const key = matched && buckets.has(matched) ? matched : EXTRAS_CATCH_ALL
     const bucket = buckets.get(key)!
     bucket.amount += extra.amount
     bucket.extrasAmount += extra.amount
@@ -205,8 +214,8 @@ export function buildSalesforceBreakdown(input: BreakdownInput): SalesforceBreak
   const expected = total + stcTotal
   const rawVariance = rows.reduce((s, r) => s + r.amount, 0) - expected
   if (Math.abs(rawVariance) < 0.05) {
-    const primaryRow = rows.find(r => r.key === primary) ?? rows[0]
-    if (primaryRow) primaryRow.amount = round2(primaryRow.amount - rawVariance)
+    const catchAllRow = rows.find(r => r.key === EXTRAS_CATCH_ALL) ?? rows[0]
+    if (catchAllRow) catchAllRow.amount = round2(catchAllRow.amount - rawVariance)
   }
 
   return {
