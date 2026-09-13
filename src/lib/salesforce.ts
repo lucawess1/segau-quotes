@@ -26,7 +26,7 @@ const PRODUCT_ORDER: SalesforceProductKey[] = ['solarBattery', 'hwhp', 'hvacSpli
 
 /**
  * Cash-basis share of the water-filter-with-HWHP combo that comes off the water filter line; the
- * HWHP line absorbs whatever is left (so today's $800 combo splits $500 / $300, and a reconfigured
+ * HWHP line absorbs whatever is left (so today's $600 combo splits $500 / $100, and a reconfigured
  * combo still takes $500 off the filter).
  */
 const WATER_FILTER_COMBO_SHARE = 500
@@ -60,8 +60,11 @@ export function attributeExtra(category: string, name: string): SalesforceProduc
  * (the caller applies the finance uplift, so the split holds its shape on any term):
  *
  *   • water filter + HWHP — $500 off the filter, the remainder off the HWHP
- *   • HWHP, or water filter on its own — half off that line, the other half spread evenly
- *     across every other product line on the quote
+ *   • HWHP without a filter — half off the HWHP line, the other half spread evenly across every
+ *     other product line on the quote
+ *
+ * Only a HWHP earns the combo today, so the water-filter-anchored branch below is unreachable
+ * from the quote pages; it is kept so this stays a total-preserving split of whatever it is given.
  *
  * A share bigger than the line it lands on is clamped, and the shortfall moves to the largest
  * remaining line, so no product is ever quoted below zero.

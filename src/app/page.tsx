@@ -41,7 +41,7 @@ type SavedQuote = {
 type HwhpProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; stc_value: number; active: boolean }
 type HvacProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; active: boolean }
 type WaterFilterProduct = { id: number; code: string; brand: string | null; model: string; cost_metro: number | null; cost_regional: number | null; total_filters: number | null; cartridge_1: string | null; cartridge_2: string | null; cartridge_3: string | null; active: boolean }
-type RetailConfig = { hwhp_combo_discount: number; water_filter_combo_discount_hwhp?: number; water_filter_combo_discount_base?: number }
+type RetailConfig = { hwhp_combo_discount: number }
 type InverterUpgrade = {
   id: number; code: string; brand: string; inverter_model: string
   previous_inverter_model: string | null
@@ -230,7 +230,7 @@ export default function QuoteBuilder() {
   const [hwhpProducts, setHwhpProducts] = useState<HwhpProduct[]>([])
   const [hvacProducts, setHvacProducts] = useState<HvacProduct[]>([])
   const [waterFilterProducts, setWaterFilterProducts] = useState<WaterFilterProduct[]>([])
-  const [retailConfig, setRetailConfig] = useState<RetailConfig>({ hwhp_combo_discount: 600, water_filter_combo_discount_hwhp: 800, water_filter_combo_discount_base: 600 })
+  const [retailConfig, setRetailConfig] = useState<RetailConfig>({ hwhp_combo_discount: 600 })
   const [selectedHwhpId, setSelectedHwhpId] = useState<number | null>(null)
   const [isHvacIncluded, setIsHvacIncluded] = useState<boolean>(false)
   const [selectedHvacId, setSelectedHvacId] = useState<number | null>(null)
@@ -791,22 +791,14 @@ export default function QuoteBuilder() {
     return c ?? 0
   }, [includesWaterFilter, selectedWaterFilter, territory])
 
-  // Fallbacks below matter: retail_config is loaded with select('*') and overwrites the state
-  // default wholesale, so if this code ships before the new columns exist the values come back
-  // undefined and Math.max(600, undefined) is NaN — which would poison the entire quote total.
-  // Combo discounts. The water filter's is tiered: $800 when paired with a HWHP, $600 when paired
-  // with a Solar/Battery package instead, and nothing when the filter is sold on its own (or only
-  // alongside HVAC, which doesn't attract a combo).
-  const hwhpComboDiscountRaw = includesHwhp && hasNonHwhpBase ? retailConfig.hwhp_combo_discount : 0
-  const waterFilterComboDiscountRaw = !includesWaterFilter
-    ? 0
-    : includesHwhp
-      ? (retailConfig.water_filter_combo_discount_hwhp ?? 800)
-      : (includesSolar || includesBattery)
-        ? (retailConfig.water_filter_combo_discount_base ?? 600)
-        : 0
-  // They do NOT stack — only the larger of the two applies.
-  const comboDiscount = Math.max(hwhpComboDiscountRaw, waterFilterComboDiscountRaw)
+  // There is one multi-product combo discount ($600) and it hangs off the HWHP: it fires when a
+  // HWHP is paired with a Solar/Battery package, or with a water filter. A water filter earns
+  // nothing on its own, nor alongside Solar/Battery or HVAC without a HWHP. It never stacks —
+  // a HWHP sold with both a base package and a filter is still the one $600.
+  // The ?? matters: retail_config is loaded with select('*') and overwrites the state default
+  // wholesale, so a missing column would come back undefined and turn the quote total into NaN.
+  const earnsComboDiscount = includesHwhp && (hasNonHwhpBase || includesWaterFilter)
+  const comboDiscount = earnsComboDiscount ? (retailConfig.hwhp_combo_discount ?? 600) : 0
 
   // Inverter upgrade: flat $ on top of the base package, replacing the standard inverter.
   // STC does not change with an upgrade (STC depends on panels + battery only).
