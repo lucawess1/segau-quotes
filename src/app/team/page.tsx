@@ -31,7 +31,8 @@ type SpecialistProfile = {
   active: boolean
 }
 
-const MANAGEABLE_TEAMS = ['inbound', 'asc'] as const
+const MANAGEABLE_TEAMS = ['inbound', 'asc', 'nz', 'nz_inbound'] as const
+const TEAM_LABELS: Record<string, string> = { inbound: 'Inbound', asc: 'ASC', nz: 'NZ', nz_inbound: 'NZ Inbound' }
 
 export default function TeamPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -225,7 +226,7 @@ export default function TeamPage() {
                     onChange={e => setNewTeams(e.target.checked ? [...newTeams, team] : newTeams.filter(t => t !== team))}
                     className="w-4 h-4 accent-blue-600 dark:accent-blue-400"
                   />
-                  <span className="capitalize">{team}</span>
+                  <span>{TEAM_LABELS[team] ?? team}</span>
                 </label>
               ))}
             </div>
@@ -268,7 +269,7 @@ export default function TeamPage() {
                           onChange={() => toggleInviteTeam(entry, team)}
                           className="w-3.5 h-3.5 accent-blue-600 dark:accent-blue-400"
                         />
-                        <span className="capitalize">{team}</span>
+                        <span>{TEAM_LABELS[team] ?? team}</span>
                       </label>
                     ))}
                     <button
@@ -312,7 +313,7 @@ export default function TeamPage() {
                           onChange={() => toggleSpecialistTeam(s, team)}
                           className="w-3.5 h-3.5 accent-blue-600 dark:accent-blue-400"
                         />
-                        <span className="capitalize">{team}</span>
+                        <span>{TEAM_LABELS[team] ?? team}</span>
                       </label>
                     ))}
                     <button

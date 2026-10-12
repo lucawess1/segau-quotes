@@ -1041,6 +1041,12 @@ export default function QuoteBuilder() {
               {(profile.teams?.includes('asc') || profile.role === 'admin') && (
                 <option value="/asc">ASC</option>
               )}
+              {(profile.teams?.includes('nz') || profile.role === 'admin') && (
+                <option value="/nz">NZ</option>
+              )}
+              {(profile.teams?.includes('nz_inbound') || profile.role === 'admin') && (
+                <option value="/nz/inbound">NZ Inbound</option>
+              )}
             </select>
           )}
           {profile && (profile.role === 'admin' || profile.teams?.includes('team_admin')) && (
